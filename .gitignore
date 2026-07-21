@@ -2,3 +2,13 @@
 Thumbs.db
 *.log
 *.tmp
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.pyc
+logs/
+key/
+config.json
+notification_cache.json

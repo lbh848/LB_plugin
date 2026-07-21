@@ -4,6 +4,14 @@ RisuAI의 생성 이벤트를 감지해 삽화 서버 진행 상태를 표시하
 
 배포 파일은 `lightboard_illust_status.js` 하나입니다. 파일명과 GitHub 경로는 앞으로 고정하고, 릴리스마다 `//@version`만 증가시킵니다.
 
+## 함께 배포하는 구성
+
+- `module/라이트보드  삽화 3.4.1-soya-v42.module.charx`: 현재 플러그인과 함께 사용하는 모듈
+- `module/🔦라이트보드 - 3.4.0-soya-0704.module.charx`: 백엔드 호환 기준 모듈
+- `backend/`: 위 두 모듈과 호환되는 ComfyUI hooking server 소스 스냅샷
+
+백엔드에는 실행 소스만 포함합니다. 개인 `config.json`, API 키, 가상환경, 모델, 에셋, 로그와 생성 세션은 포함하지 않습니다. 자세한 구성은 [backend/README_LB_COMPAT.md](backend/README_LB_COMPAT.md)를 참고하십시오.
+
 ## 최초 GitHub 설정
 
 1. 공개 저장소 `lbh848/LB_plugin`과 기본 브랜치 `main`을 유지합니다.
