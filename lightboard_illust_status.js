@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfymanager plugin v1.0.0
+//@display-name soya comfy manager plugin v1.0.1
 //@api 3.0
-//@version 42.0.7
+//@version 42.0.8
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -487,7 +487,7 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>LightBoard 삽화 서버 상태</h1><div class="sub">v42.0.7 · generation/전체/개별 재생성 신호가 있을 때만 조회 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.1</h1><div class="sub">v42.0.8 · generation/전체/개별 재생성 신호가 있을 때만 조회 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>저장하면 현재 캐릭터의 모듈 설정에 반영됩니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
         <section class="option"><label>대기 중 서버 요청</label><small>없음 · generation 신호 후 ${Math.round(discoveryPollMs / 1000)}초, 활성 작업 중 ${Math.round(pollMs / 1000)}초 간격 · Health 5분 캐시</small></section>
@@ -635,7 +635,7 @@
       catch (_) { settings.configured = false; baseEndpoint = ''; }
     }
     if (typeof Risuai.registerSetting !== 'function') throw new Error('Risuai.registerSetting is unavailable');
-    await Risuai.registerSetting('삽화 서버 상태', openDashboard, SETTINGS_ICON, 'html');
+    await Risuai.registerSetting('soya comfy 플러그인', openDashboard, SETTINGS_ICON, 'html');
     if (typeof Risuai.addRisuScriptHandler === 'function') {
       await Risuai.addRisuScriptHandler('output', generationOutputHandler);
       generationHookRegistered = true;

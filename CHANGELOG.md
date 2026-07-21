@@ -1,5 +1,11 @@
 # Changelog
 
+## 42.0.8
+
+- 표시 이름을 `soya comfy manager plugin v1.0.1`로 변경
+- 대시보드 접속 버튼을 `soya comfy 플러그인`으로 변경
+- 대시보드 제목을 `soya comfy manager v1.0.1`로 변경
+
 ## 42.0.7
 
 - 대시보드가 화면에 보이는 최신 HTTPS 주소를 직접 읽어 저장하도록 수정
