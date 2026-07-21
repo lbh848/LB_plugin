@@ -7,9 +7,14 @@
 - 배포 파일은 루트의 `lightboard_illust_status.js` 하나다. 버전별 새 파일을 만들지 않는다.
 - 온라인 업데이트 호환성을 위해 `//@name lightboard-illust-status-v42`를 변경하지 않는다.
 - 새 배포마다 `//@version`을 증가시키되 선언을 첫 512바이트 안에 유지한다.
+- 새 배포에서는 플러그인 표시 버전을 반드시 증가시킨다. 예: `//@display-name soya comfy manager plugin v1.0.1` → `//@display-name soya comfy manager plugin v1.0.2`.
+- 대시보드 제목의 표시 버전도 플러그인 표시 버전과 동일하게 맞춘다. 예: `soya comfy manager v1.0.1` → `soya comfy manager v1.0.2`.
+- 대시보드에 표시되는 배포 버전은 `//@version`과 동일하게 맞춘다. 예: `//@version 42.0.9`이면 대시보드에도 `v42.0.9`를 표시하며, `v42.0.8` 같은 이전 값이 남아 있으면 안 된다.
+- 모듈 내용이 변경되면 `soya-vNN` 번호를 반드시 다음 정수로 증가시키고 새 배포 파일을 만든다. 예: `module/라이트보드  삽화 3.4.1-soya-v42.module.charx`를 변경한 배포본은 `module/라이트보드  삽화 3.4.1-soya-v43.module.charx`로 만든다.
+- 변경된 모듈을 이전 버전 파일에 덮어쓰지 않는다. 파일명과 모듈 내부의 `soya-vNN` 버전 식별자도 같은 번호로 맞추고, 새 배포 파일을 `verify.ps1`의 검증 대상에 반영한다.
 - `//@update-url`의 저장소·브랜치·파일 경로를 변경하지 않는다.
 - 작업 후 반드시 `verify.ps1`을 실행한다.
-- `module/`의 `.charx` 바이너리를 직접 편집하지 않는다. 모듈 변경은 원본 작업 저장소에서 hermes-risuai-skills로 추출·재조립한 뒤 완성본을 교체한다.
+- `module/`의 `.charx` 바이너리를 직접 편집하지 않는다. 모듈 변경은 원본 작업 저장소에서 hermes-risuai-skills로 추출·재조립한 뒤 증가된 `soya-vNN` 이름의 새 완성본을 추가한다.
 - 백엔드 소스는 이 저장소에 두거나 `backend/`를 다시 만들지 않는다.
 - 백엔드 확인 또는 수정이 필요하면 `E:\test3\comfyui_hooking_server`를 작업 대상으로 사용한다.
 

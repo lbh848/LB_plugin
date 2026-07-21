@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.1
+//@display-name soya comfy manager plugin v1.0.2
 //@api 3.0
-//@version 42.0.8
+//@version 42.0.11
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -12,8 +12,8 @@
 
 // Configuration/status-only companion for soya-v42.
 // - Importing the plugin never performs a health or status request.
-// - The dashboard saves an HTTPS endpoint to the current character before checking health.
-// - The unchanged Risu generation-output channel arms short-lived session discovery.
+// - The plugin-owned HTTPS endpoint is mirrored to each current character on navigation.
+// - Unchanged Risu input/output channels sync configuration and arm session discovery.
 // - CALL1 full regeneration, RAW whole generation, and RAW per-slot regeneration
 //   buttons all arm discovery without reading their chat-index payloads.
 // - Active work switches to the faster POLL_MS interval and stops when it completes.
@@ -27,7 +27,8 @@
   const FLOAT_WINDOW_CLASS = 'lb-illust-v42-floating-window';
   const FLOAT_Z_INDEX = 1261;
   const SETTINGS_KEY = 'lightboard-illust-v42-settings';
-  const ENDPOINT_VARIABLE = 'lb-xnai-server-endpoint';
+  const ENDPOINT_VARIABLE_V2 = 'lb-xnai-server-endpoint-v2';
+  const ENDPOINT_VARIABLE_LEGACY = 'lb-xnai-server-endpoint';
   const LOOKUP_KEY_LENGTH = 24;
   const ACTION_BUTTON_SELECTOR = [
     'button[risu-btn^="lb-xnai-regenerate-all/"]',
@@ -58,13 +59,19 @@
   let floatingUnavailableLogged = false;
   let floatingSignature = '';
   let healthCheckedAt = 0;
+  let generationInputHookRegistered = false;
   let generationHookRegistered = false;
   let regenerationObserver = null;
   let regenerationBinding = false;
   let regenerationBridgeUnavailableLogged = false;
   let endpointPersistWarning = '';
+  let characterSyncTimer = null;
+  let characterSyncPromise = null;
+  let lastSynchronizedCharacterId = '';
+  let lastCharacterSyncError = '';
   const HEALTH_CACHE_MS = 5 * 60 * 1000;
   const COMPLETION_CONFIRM_POLLS = 3;
+  const CHARACTER_SYNC_DEBOUNCE_MS = 150;
   const manifestCache = new Map();
   let settings = {
     endpoint: '',
@@ -158,17 +165,86 @@
     return out.join('\n').replace(/^\n+|\n+$/g, '');
   };
 
+  const endpointDefaultVariables = (source, endpoint) => {
+    let next = upsertDefaultVariable(source, ENDPOINT_VARIABLE_V2, endpoint);
+    next = upsertDefaultVariable(next, ENDPOINT_VARIABLE_LEGACY, endpoint);
+    return next;
+  };
+
   const persistEndpointForCurrentCharacter = async (endpoint) => {
     if (typeof Risuai.getCharacter !== 'function' || typeof Risuai.setCharacter !== 'function') {
       throw new Error('현재 Risu에서 캐릭터 설정 저장 API를 사용할 수 없습니다.');
     }
-    const character = await Risuai.getCharacter();
-    if (!character || typeof character !== 'object') throw new Error('현재 캐릭터를 찾을 수 없습니다.');
-    const next = upsertDefaultVariable(character.defaultVariables, ENDPOINT_VARIABLE, endpoint);
-    if (String(character.defaultVariables || '') !== next) {
-      character.defaultVariables = next;
-      await Risuai.setCharacter(character);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const character = await Risuai.getCharacter();
+      if (!character || typeof character !== 'object') throw new Error('현재 캐릭터를 찾을 수 없습니다.');
+      const characterId = String(character.chaId || '');
+      if (!characterId) throw new Error('현재 캐릭터의 안정 ID를 찾을 수 없습니다.');
+      const next = endpointDefaultVariables(character.defaultVariables, endpoint);
+      if (String(character.defaultVariables || '') === next) {
+        return { changed: false, characterId };
+      }
+
+      // setCharacter() always targets the character selected at call time. Re-read
+      // once so a navigation in progress cannot apply the previous snapshot to it.
+      const latest = await Risuai.getCharacter();
+      if (!latest || String(latest.chaId || '') !== characterId) continue;
+      const latestNext = endpointDefaultVariables(latest.defaultVariables, endpoint);
+      if (String(latest.defaultVariables || '') === latestNext) {
+        return { changed: false, characterId };
+      }
+      latest.defaultVariables = latestNext;
+      await Risuai.setCharacter(latest);
+      return { changed: true, characterId };
     }
+    throw new Error('캐릭터 전환이 끝나지 않아 서버 주소 동기화를 보류했습니다.');
+  };
+
+  const synchronizeEndpointForCurrentCharacter = async (source) => {
+    if (!settings.configured || !baseEndpoint) return false;
+    while (characterSyncPromise) await characterSyncPromise;
+    const task = (async () => {
+      try {
+        const result = await persistEndpointForCurrentCharacter(baseEndpoint);
+        lastSynchronizedCharacterId = result.characterId;
+        lastCharacterSyncError = '';
+        endpointPersistWarning = '';
+        if (result.changed || debugEnabled) {
+          console.log(LOG, 'character_endpoint.synced', JSON.stringify({
+            source,
+            changed: result.changed,
+            characterId: result.characterId,
+            key: ENDPOINT_VARIABLE_V2,
+          }));
+        }
+        return result.changed;
+      } catch (error) {
+        const message = errorText(error);
+        if (message !== lastCharacterSyncError) {
+          lastCharacterSyncError = message;
+          console.warn(LOG, 'character_endpoint.sync_deferred', source, message);
+        }
+        if (dashboardOpen) {
+          endpointPersistWarning = `현재 캐릭터에는 서버 주소를 반영하지 못했습니다: ${message}`;
+        }
+        return false;
+      }
+    })();
+    characterSyncPromise = task;
+    try {
+      return await task;
+    } finally {
+      if (characterSyncPromise === task) characterSyncPromise = null;
+    }
+  };
+
+  const scheduleEndpointSyncForCurrentCharacter = (source, delay = CHARACTER_SYNC_DEBOUNCE_MS) => {
+    if (!settings.configured || !baseEndpoint) return;
+    if (characterSyncTimer !== null) clearTimeout(characterSyncTimer);
+    characterSyncTimer = setTimeout(() => {
+      characterSyncTimer = null;
+      void synchronizeEndpointForCurrentCharacter(source);
+    }, delay);
   };
 
   const fetchJson = async (pathname) => {
@@ -265,6 +341,26 @@
     }
   };
 
+  const generationInputHandler = async (content) => {
+    if (characterSyncTimer !== null) {
+      clearTimeout(characterSyncTimer);
+      characterSyncTimer = null;
+    }
+    let alreadySynchronized = false;
+    if (lastSynchronizedCharacterId && typeof Risuai.getCurrentCharacterIndex === 'function') {
+      try {
+        // Current Risu returns its selected character key here. The actual write
+        // still verifies the stable character.chaId before setCharacter().
+        const selected = String(await Risuai.getCurrentCharacterIndex() ?? '');
+        alreadySynchronized = selected === lastSynchronizedCharacterId;
+      } catch (_) {}
+    }
+    if (!alreadySynchronized) {
+      await synchronizeEndpointForCurrentCharacter('generation-input');
+    }
+    return content;
+  };
+
   const generationOutputHandler = (content) => {
     armSessionDiscovery('generation-output');
     return content;
@@ -307,13 +403,17 @@
       if (!root) throw new Error('main DOM access denied');
       const body = await root.querySelector('body');
       if (!body) throw new Error('main DOM body unavailable');
+      await synchronizeEndpointForCurrentCharacter('signal-bridge-init');
       await bindIllustrationActionButtons();
       if (typeof Risuai.createMutationObserver !== 'function') {
         throw new Error('Risuai.createMutationObserver is unavailable');
       }
       regenerationObserver = await Risuai.createMutationObserver(() => {
+        scheduleEndpointSyncForCurrentCharacter('character-navigation');
         void bindIllustrationActionButtons();
       });
+      // Risu's SafeMutationObserver wraps mutation.target as SafeElement. A
+      // characterData mutation targets a Text node and crashes that wrapper.
       await regenerationObserver.observe(body, { childList: true, subtree: true });
     } catch (error) {
       regenerationObserver = null;
@@ -487,8 +587,8 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.1</h1><div class="sub">v42.0.8 · generation/전체/개별 재생성 신호가 있을 때만 조회 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
-        <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>저장하면 현재 캐릭터의 모듈 설정에 반영됩니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
+        <header><div><h1>soya comfy manager v1.0.2</h1><div class="sub">v42.0.11 · 캐릭터 전환 시 서버 주소 자동 동기화 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
+        <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
         <section class="option"><label>대기 중 서버 요청</label><small>없음 · generation 신호 후 ${Math.round(discoveryPollMs / 1000)}초, 활성 작업 중 ${Math.round(pollMs / 1000)}초 간격 · Health 5분 캐시</small></section>
         <section class="server"><span class="dot"></span><div><strong>${connectionLabel}</strong><small>${configured ? ` · ${escapeHtml(baseEndpoint)}` : ' · 주소 저장 후 확인을 시작합니다.'}</small></div>${state.error ? `<span class="error-text">${escapeHtml(state.error)}</span>` : ''}</section>
@@ -525,7 +625,17 @@
         state = { online: false, error: '', checkedAt: 0, health: null, sessions: [] };
         await saveSettings();
         try {
-          await persistEndpointForCurrentCharacter(endpoint);
+          const result = await persistEndpointForCurrentCharacter(endpoint);
+          lastSynchronizedCharacterId = result.characterId;
+          if (result.changed || debugEnabled) {
+            console.log(LOG, 'character_endpoint.synced', JSON.stringify({
+              source: 'dashboard-save',
+              changed: result.changed,
+              characterId: result.characterId,
+              key: ENDPOINT_VARIABLE_V2,
+            }));
+          }
+          lastCharacterSyncError = '';
           endpointPersistWarning = '';
         } catch (error) {
           endpointPersistWarning = `서버 주소는 저장되었습니다. 현재 캐릭터에는 반영하지 못했습니다: ${errorText(error)} 캐릭터 채팅에서 대시보드를 다시 열면 자동으로 재시도합니다.`;
@@ -612,7 +722,17 @@
     await Risuai.showContainer('fullscreen');
     if (settings.configured && baseEndpoint) {
       try {
-        await persistEndpointForCurrentCharacter(baseEndpoint);
+        const result = await persistEndpointForCurrentCharacter(baseEndpoint);
+        lastSynchronizedCharacterId = result.characterId;
+        if (result.changed || debugEnabled) {
+          console.log(LOG, 'character_endpoint.synced', JSON.stringify({
+            source: 'dashboard-open',
+            changed: result.changed,
+            characterId: result.characterId,
+            key: ENDPOINT_VARIABLE_V2,
+          }));
+        }
+        lastCharacterSyncError = '';
         endpointPersistWarning = '';
       } catch (error) {
         endpointPersistWarning = `현재 캐릭터에는 서버 주소를 반영하지 못했습니다: ${errorText(error)} 캐릭터 채팅에서 대시보드를 다시 열면 자동으로 재시도합니다.`;
@@ -637,6 +757,8 @@
     if (typeof Risuai.registerSetting !== 'function') throw new Error('Risuai.registerSetting is unavailable');
     await Risuai.registerSetting('soya comfy 플러그인', openDashboard, SETTINGS_ICON, 'html');
     if (typeof Risuai.addRisuScriptHandler === 'function') {
+      await Risuai.addRisuScriptHandler('input', generationInputHandler);
+      generationInputHookRegistered = true;
       await Risuai.addRisuScriptHandler('output', generationOutputHandler);
       generationHookRegistered = true;
     } else {
@@ -647,7 +769,10 @@
       role: 'endpoint-config-and-status-observer',
       initial_health_request: false,
       polling: 'idle=off; generation-signal=discovery; active=fast',
+      generation_input_endpoint_sync: generationInputHookRegistered,
       generation_output_hook: generationHookRegistered,
+      character_endpoint_sync: 'event-driven; polling=off',
+      endpoint_variable_priority: [ENDPOINT_VARIABLE_V2, ENDPOINT_VARIABLE_LEGACY],
       illustration_action_button_signals: ['regenerate-all', 'generate-all', 'gen'],
       raw_regeneration_floating: true,
       completion_confirm_polls: COMPLETION_CONFIRM_POLLS,
@@ -667,9 +792,18 @@
     await Risuai.onUnload(async () => {
       watchEnabled = false;
       stopTimer();
+      if (characterSyncTimer !== null) clearTimeout(characterSyncTimer);
+      characterSyncTimer = null;
       dashboardOpen = false;
+      if (regenerationObserver) {
+        try { await regenerationObserver.disconnect(); } catch (_) {}
+        regenerationObserver = null;
+      }
       if (generationHookRegistered && typeof Risuai.removeRisuScriptHandler === 'function') {
         try { await Risuai.removeRisuScriptHandler('output', generationOutputHandler); } catch (_) {}
+      }
+      if (generationInputHookRegistered && typeof Risuai.removeRisuScriptHandler === 'function') {
+        try { await Risuai.removeRisuScriptHandler('input', generationInputHandler); } catch (_) {}
       }
       await removeFloatingWindow();
       console.log(LOG, 'plugin.unload');

@@ -1,5 +1,23 @@
 # Changelog
 
+## 42.0.11
+
+- Risu `SafeMutationObserver`가 텍스트 노드를 `SafeElement`로 감싸며 `getAttribute is not a function`을 발생시키는 `characterData` 관찰 옵션 제거
+- 캐릭터 전환 감지는 안전한 `childList + subtree` DOM 신호와 일반 생성 직전 input 동기화로 유지
+- 플러그인과 대시보드 표시 버전을 `v1.0.2`, 대시보드 배포 버전을 `v42.0.11`로 동기화
+
+## 42.0.10
+
+- 플러그인 저장소의 서버 주소를 기준으로 캐릭터 전환 시 현재 캐릭터 설정에 자동 동기화
+- 기존 채팅에 남은 예전 주소보다 우선하는 `lb-xnai-server-endpoint-v2` 키를 추가하고, 호환용 기존 키도 함께 기록
+- 일반 생성 직전의 변경 없는 input 신호와 기존 DOM 전환 감지를 함께 사용하며 네트워크 폴링은 추가하지 않음
+- 모듈의 서버 주소 탐색 순서를 `v2 → 기존 키 → 모듈 수동 설정`으로 변경하고 manifest 조건부 1회 재시도는 유지
+
+## 42.0.9
+
+- Risu `request()`의 분당 제한을 고려해 슬롯 manifest가 HTTP 500 `fetch failed`를 반환할 때만 1.5초 후 한 번 재시도
+- 정상 응답과 그 밖의 HTTP 오류에는 추가 manifest 요청을 보내지 않도록 제한
+
 ## 42.0.8
 
 - 표시 이름을 `soya comfy manager plugin v1.0.1`로 변경
