@@ -8,9 +8,8 @@ RisuAI의 생성 이벤트를 감지해 삽화 서버 진행 상태를 표시하
 
 - `module/라이트보드  삽화 3.4.1-soya-v42.module.charx`: 현재 플러그인과 함께 사용하는 모듈
 - `module/🔦라이트보드 - 3.4.0-soya-0704.module.charx`: 백엔드 호환 기준 모듈
-- `backend/`: 위 두 모듈과 호환되는 ComfyUI hooking server 소스 스냅샷
 
-백엔드에는 실행 소스만 포함합니다. 개인 `config.json`, API 키, 가상환경, 모델, 에셋, 로그와 생성 세션은 포함하지 않습니다. 자세한 구성은 [backend/README_LB_COMPAT.md](backend/README_LB_COMPAT.md)를 참고하십시오.
+백엔드 소스와 실행 환경은 이 저장소에 포함하지 않습니다. 백엔드 작업 위치는 로컬 작업 지침인 `AGENTS.md`와 `CLAUDE.md`를 따릅니다.
 
 ## 최초 GitHub 설정
 

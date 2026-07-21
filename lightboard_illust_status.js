@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
 //@display-name soya comfymanager plugin v1.0.0
 //@api 3.0
-//@version 42.0.6
+//@version 42.0.7
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -62,6 +62,7 @@
   let regenerationObserver = null;
   let regenerationBinding = false;
   let regenerationBridgeUnavailableLogged = false;
+  let endpointPersistWarning = '';
   const HEALTH_CACHE_MS = 5 * 60 * 1000;
   const COMPLETION_CONFIRM_POLLS = 3;
   const manifestCache = new Map();
@@ -476,7 +477,7 @@
         #${ROOT_ID} .config-row{display:flex;gap:9px;margin-top:9px} #${ROOT_ID} .config-row input{flex:1}
         #${ROOT_ID} .option{display:flex;align-items:center;justify-content:space-between;gap:16px} #${ROOT_ID} .option label{display:flex;gap:9px;align-items:center;font-weight:650}
         #${ROOT_ID} .server{display:flex;gap:10px;align-items:center} #${ROOT_ID} .dot{width:10px;height:10px;border-radius:50%;background:${dotColor}}
-        #${ROOT_ID} .error-text{color:#ff98a8;margin-left:auto;font-size:12px}
+        #${ROOT_ID} .error-text{color:#ff98a8;margin-left:auto;font-size:12px} #${ROOT_ID} .warning-text{display:block;color:#ffd479;margin-top:8px}
         #${ROOT_ID} .session{border:1px solid #30394d;border-left:4px solid #68a7ff;border-radius:12px;padding:14px;background:#171c27;margin:10px 0}
         #${ROOT_ID} .session.ready{border-left-color:#42d392} #${ROOT_ID} .session.error{border-left-color:#ff647c}
         #${ROOT_ID} code{font-size:12px;color:#c8d3ef;overflow-wrap:anywhere} #${ROOT_ID} .badge{font-size:11px;padding:3px 7px;border-radius:999px;background:#273149}
@@ -486,8 +487,8 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>LightBoard 삽화 서버 상태</h1><div class="sub">v42.0.4 · generation/전체/개별 재생성 신호가 있을 때만 조회 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
-        <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>저장하면 현재 캐릭터의 모듈 설정에 반영됩니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small></section>
+        <header><div><h1>LightBoard 삽화 서버 상태</h1><div class="sub">v42.0.7 · generation/전체/개별 재생성 신호가 있을 때만 조회 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
+        <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>저장하면 현재 캐릭터의 모듈 설정에 반영됩니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
         <section class="option"><label>대기 중 서버 요청</label><small>없음 · generation 신호 후 ${Math.round(discoveryPollMs / 1000)}초, 활성 작업 중 ${Math.round(pollMs / 1000)}초 간격 · Health 5분 캐시</small></section>
         <section class="server"><span class="dot"></span><div><strong>${connectionLabel}</strong><small>${configured ? ` · ${escapeHtml(baseEndpoint)}` : ' · 주소 저장 후 확인을 시작합니다.'}</small></div>${state.error ? `<span class="error-text">${escapeHtml(state.error)}</span>` : ''}</section>
@@ -511,8 +512,8 @@
     });
     document.getElementById('lb-v42-save-check')?.addEventListener('click', async () => {
       try {
-        const endpoint = normalizeEndpoint(endpointDraft || document.getElementById('lb-v42-endpoint')?.value);
-        await persistEndpointForCurrentCharacter(endpoint);
+        const endpointInput = document.getElementById('lb-v42-endpoint');
+        const endpoint = normalizeEndpoint(endpointInput ? endpointInput.value : endpointDraft);
         endpointDraft = endpoint;
         endpointEditing = false;
         baseEndpoint = endpoint;
@@ -520,8 +521,16 @@
         settings.configured = true;
         watchEnabled = true;
         healthCheckedAt = 0;
-        state = { ...state, online: false, error: '', checkedAt: 0, sessions: [] };
+        manifestCache.clear();
+        state = { online: false, error: '', checkedAt: 0, health: null, sessions: [] };
         await saveSettings();
+        try {
+          await persistEndpointForCurrentCharacter(endpoint);
+          endpointPersistWarning = '';
+        } catch (error) {
+          endpointPersistWarning = `서버 주소는 저장되었습니다. 현재 캐릭터에는 반영하지 못했습니다: ${errorText(error)} 캐릭터 채팅에서 대시보드를 다시 열면 자동으로 재시도합니다.`;
+          console.warn(LOG, 'character_endpoint.save_deferred', errorText(error));
+        }
         renderDashboard();
         void initIllustrationActionSignalBridge();
         await poll();
@@ -602,8 +611,12 @@
     if (!endpointDraft) endpointDraft = settings.endpoint || baseEndpoint || endpointPrefill;
     await Risuai.showContainer('fullscreen');
     if (settings.configured && baseEndpoint) {
-      try { await persistEndpointForCurrentCharacter(baseEndpoint); } catch (error) {
-        state = { ...state, error: errorText(error) };
+      try {
+        await persistEndpointForCurrentCharacter(baseEndpoint);
+        endpointPersistWarning = '';
+      } catch (error) {
+        endpointPersistWarning = `현재 캐릭터에는 서버 주소를 반영하지 못했습니다: ${errorText(error)} 캐릭터 채팅에서 대시보드를 다시 열면 자동으로 재시도합니다.`;
+        console.warn(LOG, 'character_endpoint.save_deferred', errorText(error));
       }
     }
     renderDashboard();
