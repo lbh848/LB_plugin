@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name LightBoard Illust Status v42 (Generation-triggered Floating)
+//@display-name soya comfymanager plugin v1.0.0
 //@api 3.0
-//@version 42.0.5
+//@version 42.0.6
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)

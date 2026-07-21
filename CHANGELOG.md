@@ -1,5 +1,10 @@
 # Changelog
 
+## 42.0.6
+
+- 표시 이름을 `soya comfymanager plugin v1.0.0`으로 변경
+- 온라인 업데이트 식별자와 런타임 동작은 유지
+
 ## 42.0.5
 
 - GitHub raw URL 기반 온라인 업데이트 메타데이터 추가
