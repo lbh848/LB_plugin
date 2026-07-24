@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.2
+//@display-name soya comfy manager plugin v1.0.3
 //@api 3.0
-//@version 42.0.11
+//@version 42.0.12
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -77,6 +77,10 @@
     endpoint: '',
     configured: false,
     floatingEnabled: true,
+    floatingAlwaysVisible: false,
+    floatingZIndex: FLOAT_Z_INDEX,
+    floatingOffsetX: 14,
+    floatingOffsetY: 14,
   };
   let state = {
     online: false,
@@ -133,6 +137,10 @@
           endpoint: String(stored.endpoint || ''),
           configured: stored.configured === true,
           floatingEnabled: stored.floatingEnabled !== false,
+          floatingAlwaysVisible: stored.floatingAlwaysVisible === true,
+          floatingZIndex: Number.isFinite(Number(stored.floatingZIndex)) ? Number(stored.floatingZIndex) : FLOAT_Z_INDEX,
+          floatingOffsetX: Number.isFinite(Number(stored.floatingOffsetX)) ? Number(stored.floatingOffsetX) : 14,
+          floatingOffsetY: Number.isFinite(Number(stored.floatingOffsetY)) ? Number(stored.floatingOffsetY) : 14,
         };
       }
     } catch (error) {
@@ -438,7 +446,6 @@
   };
 
   const ensureFloatingWindow = async () => {
-    if (floatingWindow) return floatingWindow;
     const root = await Risuai.getRootDocument?.();
     if (!root) throw new Error('main DOM access denied');
     const body = await root.querySelector('body');
@@ -454,9 +461,9 @@
     const container = await root.querySelector(`.${FLOAT_STACK_CLASS} > div`);
     if (!container) throw new Error('floating stack container unavailable');
     await container.setStyle('position', 'fixed');
-    await container.setStyle('top', '14px');
-    await container.setStyle('right', '14px');
-    await container.setStyle('zIndex', String(FLOAT_Z_INDEX));
+    await container.setStyle('top', `${settings.floatingOffsetY}px`);
+    await container.setStyle('right', `${settings.floatingOffsetX}px`);
+    await container.setStyle('zIndex', String(settings.floatingZIndex));
     await container.setStyle('display', 'flex');
     await container.setStyle('flexDirection', 'column');
     await container.setStyle('gap', '10px');
@@ -472,37 +479,49 @@
 
   const renderFloatingWindow = async () => {
     const active = activeSessions();
-    if (!settings.floatingEnabled || !state.online || active.length === 0) {
+    const showAlways = settings.floatingEnabled && settings.floatingAlwaysVisible;
+    if (!settings.floatingEnabled || (!showAlways && (!state.online || active.length === 0))) {
       await removeFloatingWindow();
       return;
     }
     try {
       const floating = await ensureFloatingWindow();
-      const rows = active.slice(0, 4).map((session) => {
-        const progress = session?.progress || {};
-        const phase = String(progress.phase || session?.status || 'processing');
-        const percent = Math.max(0, Math.min(100, safeNumber(progress.value)));
-        const done = Math.max(0, Math.trunc(safeNumber(progress.done)));
-        const total = Math.max(0, Math.trunc(safeNumber(progress.total)));
-        return `<div style="min-width:230px;max-width:310px;background:rgb(23 28 39 / 94%);color:#eaf0ff;border:1px solid #39445b;border-left:4px solid #68a7ff;border-radius:9px;padding:10px 12px;box-shadow:0 10px 28px rgb(0 0 0 / 35%);font:12px/1.45 Inter,system-ui,sans-serif">
-          <div style="display:flex;justify-content:space-between;gap:10px"><strong>LightBoard 삽화</strong><span style="color:#9eabc5">${escapeHtml(phase)}</span></div>
-          <div style="margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(progress.label || '서버 처리 중')}</div>
-          <div style="height:5px;background:#293043;border-radius:99px;overflow:hidden;margin-top:8px"><i style="display:block;width:${percent}%;height:100%;background:linear-gradient(90deg,#5e8cff,#55d6be)"></i></div>
-          <div style="display:flex;justify-content:space-between;color:#9eabc5;margin-top:5px"><span>${percent.toFixed(1)}%</span><span>${total > 0 ? `${done}/${total}` : ''}</span></div>
+      if (active.length > 0) {
+        const rows = active.slice(0, 4).map((session) => {
+          const progress = session?.progress || {};
+          const phase = String(progress.phase || session?.status || 'processing');
+          const percent = Math.max(0, Math.min(100, safeNumber(progress.value)));
+          const done = Math.max(0, Math.trunc(safeNumber(progress.done)));
+          const total = Math.max(0, Math.trunc(safeNumber(progress.total)));
+          return `<div style="min-width:230px;max-width:310px;background:rgb(23 28 39 / 94%);color:#eaf0ff;border:1px solid #39445b;border-left:4px solid #68a7ff;border-radius:9px;padding:10px 12px;box-shadow:0 10px 28px rgb(0 0 0 / 35%);font:12px/1.45 Inter,system-ui,sans-serif">
+            <div style="display:flex;justify-content:space-between;gap:10px"><strong>LightBoard 삽화</strong><span style="color:#9eabc5">${escapeHtml(phase)}</span></div>
+            <div style="margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(progress.label || '서버 처리 중')}</div>
+            <div style="height:5px;background:#293043;border-radius:99px;overflow:hidden;margin-top:8px"><i style="display:block;width:${percent}%;height:100%;background:linear-gradient(90deg,#5e8cff,#55d6be)"></i></div>
+            <div style="display:flex;justify-content:space-between;color:#9eabc5;margin-top:5px"><span>${percent.toFixed(1)}%</span><span>${total > 0 ? `${done}/${total}` : ''}</span></div>
+          </div>`;
+        }).join('');
+        await floating.setInnerHTML(rows);
+        const nextFloatingSignature = active.map((session) => `${session?.session_id}:${session?.progress?.phase}:${session?.progress?.value}`).join('|');
+        if (nextFloatingSignature !== floatingSignature) {
+          floatingSignature = nextFloatingSignature;
+          console.log(LOG, 'floating.shown', JSON.stringify({ count: active.length, zIndex: settings.floatingZIndex }));
+        }
+      } else {
+        const placeholder = `<div style="min-width:230px;max-width:310px;background:rgb(23 28 39 / 94%);color:#eaf0ff;border:1px solid #39445b;border-left:4px solid #9eabc5;border-radius:9px;padding:10px 12px;box-shadow:0 10px 28px rgb(0 0 0 / 35%);font:12px/1.45 Inter,system-ui,sans-serif">
+          <div style="display:flex;justify-content:space-between;gap:10px"><strong>LightBoard 삽화</strong><span style="color:#9eabc5">대기</span></div>
+          <div style="margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">위치 확인용 미리보기 (활성 작업 없음)</div>
+          <div style="height:5px;background:#293043;border-radius:99px;overflow:hidden;margin-top:8px"></div>
+          <div style="display:flex;justify-content:space-between;color:#9eabc5;margin-top:5px"><span>항상 보이기</span><span>z ${settings.floatingZIndex}</span></div>
         </div>`;
-      }).join('');
-      await floating.setInnerHTML(rows);
+        await floating.setInnerHTML(placeholder);
+        floatingSignature = '';
+      }
       await floating.setStyle('display', 'flex');
       await floating.setStyle('flexDirection', 'column');
       await floating.setStyle('gap', '8px');
       await floating.setStyle('visibility', 'visible');
       await floating.setStyle('opacity', '1');
       await floating.setStyle('pointerEvents', 'auto');
-      const nextFloatingSignature = active.map((session) => `${session?.session_id}:${session?.progress?.phase}:${session?.progress?.value}`).join('|');
-      if (nextFloatingSignature !== floatingSignature) {
-        floatingSignature = nextFloatingSignature;
-        console.log(LOG, 'floating.shown', JSON.stringify({ count: active.length, zIndex: FLOAT_Z_INDEX }));
-      }
       floatingUnavailableLogged = false;
     } catch (error) {
       floatingWindow = null;
@@ -540,8 +559,14 @@
     const liveEndpointInput = document.getElementById('lb-v42-endpoint');
     if (liveEndpointInput) {
       endpointDraft = String(liveEndpointInput.value || '');
-      if (!force && (endpointEditing || document.activeElement === liveEndpointInput)) return;
     }
+    const activeEl = document.activeElement;
+    const activeId = activeEl && activeEl.id ? String(activeEl.id) : '';
+    const editingInput = activeId === 'lb-v42-endpoint'
+      || activeId === 'lb-v42-float-z'
+      || activeId === 'lb-v42-float-x'
+      || activeId === 'lb-v42-float-y';
+    if (!force && (endpointEditing || editingInput)) return;
     const configured = settings.configured && Boolean(baseEndpoint);
     const endpointValue = endpointDraft || (configured ? baseEndpoint : (settings.endpoint || endpointPrefill));
     const connectionLabel = !configured ? '설정 전' : state.online ? '온라인' : state.checkedAt ? '연결 실패' : '확인 전';
@@ -576,6 +601,7 @@
         #${ROOT_ID} .config,#${ROOT_ID} .option,#${ROOT_ID} .server{border:1px solid #30394d;border-radius:12px;background:#171c27;padding:14px;margin:14px 0}
         #${ROOT_ID} .config-row{display:flex;gap:9px;margin-top:9px} #${ROOT_ID} .config-row input{flex:1}
         #${ROOT_ID} .option{display:flex;align-items:center;justify-content:space-between;gap:16px} #${ROOT_ID} .option label{display:flex;gap:9px;align-items:center;font-weight:650}
+        #${ROOT_ID} .floating-pos{flex-direction:column;align-items:stretch;gap:10px} #${ROOT_ID} .float-controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px} #${ROOT_ID} .float-controls label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#aab3c8} #${ROOT_ID} .float-controls input{width:92px;border:1px solid #4d5870;background:#0f1420;color:#fff;border-radius:9px;padding:8px 10px}
         #${ROOT_ID} .server{display:flex;gap:10px;align-items:center} #${ROOT_ID} .dot{width:10px;height:10px;border-radius:50%;background:${dotColor}}
         #${ROOT_ID} .error-text{color:#ff98a8;margin-left:auto;font-size:12px} #${ROOT_ID} .warning-text{display:block;color:#ffd479;margin-top:8px}
         #${ROOT_ID} .session{border:1px solid #30394d;border-left:4px solid #68a7ff;border-radius:12px;padding:14px;background:#171c27;margin:10px 0}
@@ -587,9 +613,11 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.2</h1><div class="sub">v42.0.11 · 캐릭터 전환 시 서버 주소 자동 동기화 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.3</h1><div class="sub">v42.0.12 · 캐릭터 전환 시 서버 주소 자동 동기화 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
+        <section class="option floating-pos"><label>플로팅 창 위치 · z-index</label><div class="float-controls"><label>z-index<input id="lb-v42-float-z" type="number" min="0" max="99999" value="${settings.floatingZIndex}"></label><label>오른쪽 여백<input id="lb-v42-float-x" type="number" min="0" max="4000" value="${settings.floatingOffsetX}"></label><label>위쪽 여백<input id="lb-v42-float-y" type="number" min="0" max="4000" value="${settings.floatingOffsetY}"></label></div><small>다른 플러그인 DOM과 겹칠 때 z-index를 낮추면 상대방 닫기 버튼이 위로 올라옵니다. 대시보드를 닫아야 플로팅 창이 보입니다.</small></section>
+        <section class="option"><label><input id="lb-v42-float-always" type="checkbox" ${settings.floatingAlwaysVisible ? 'checked' : ''}>항상 보이기 (위치 잡기용)</label><small>활성 작업이 없어도 플로팅 창을 띄워 둡니다. 위치를 잡은 뒤 끄면 됩니다.</small></section>
         <section class="option"><label>대기 중 서버 요청</label><small>없음 · generation 신호 후 ${Math.round(discoveryPollMs / 1000)}초, 활성 작업 중 ${Math.round(pollMs / 1000)}초 간격 · Health 5분 캐시</small></section>
         <section class="server"><span class="dot"></span><div><strong>${connectionLabel}</strong><small>${configured ? ` · ${escapeHtml(baseEndpoint)}` : ' · 주소 저장 후 확인을 시작합니다.'}</small></div>${state.error ? `<span class="error-text">${escapeHtml(state.error)}</span>` : ''}</section>
         ${rows || '<div class="empty">조회된 삽화 세션이 없습니다.</div>'}
@@ -610,6 +638,29 @@
       await renderFloatingWindow();
       schedulePoll();
     });
+    document.getElementById('lb-v42-float-always')?.addEventListener('change', async (event) => {
+      settings.floatingAlwaysVisible = Boolean(event.currentTarget?.checked);
+      await saveSettings();
+      await renderFloatingWindow();
+      schedulePoll();
+    });
+    const bindFloatPositionInput = (id, key, min, max) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', (event) => {
+        const v = safeNumber(event.currentTarget?.value);
+        if (Number.isFinite(v)) settings[key] = Math.max(min, Math.min(max, Math.trunc(v)));
+      });
+      el.addEventListener('change', async () => {
+        const current = document.getElementById(id);
+        if (current) current.value = String(settings[key]);
+        await saveSettings();
+        await renderFloatingWindow();
+      });
+    };
+    bindFloatPositionInput('lb-v42-float-z', 'floatingZIndex', 0, 99999);
+    bindFloatPositionInput('lb-v42-float-x', 'floatingOffsetX', 0, 4000);
+    bindFloatPositionInput('lb-v42-float-y', 'floatingOffsetY', 0, 4000);
     document.getElementById('lb-v42-save-check')?.addEventListener('click', async () => {
       try {
         const endpointInput = document.getElementById('lb-v42-endpoint');
@@ -666,7 +717,8 @@
       watchSawActive = false;
       watchEnabled = false;
       stopTimer();
-      await removeFloatingWindow();
+      state = { ...state, sessions: [] };
+      await renderFloatingWindow();
       renderDashboard();
     });
   };
@@ -786,9 +838,12 @@
       target_message_index_access: false,
       image_transport: false,
       fullscreen_z_index: ROOT_Z_INDEX,
-      floating_z_index: FLOAT_Z_INDEX,
+      floating_z_index: settings.floatingZIndex,
+      floating_always_visible: settings.floatingAlwaysVisible,
+      floating_position: { right: settings.floatingOffsetX, top: settings.floatingOffsetY },
     }));
     if (settings.configured && baseEndpoint) void initIllustrationActionSignalBridge();
+    void renderFloatingWindow();
     await Risuai.onUnload(async () => {
       watchEnabled = false;
       stopTimer();
