@@ -64,6 +64,7 @@ foreach ($signal in $requiredSignals) {
 }
 
 $requiredBundleFiles = @(
+    'module\라이트보드  삽화 3.4.1-soya-v43.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v42.module.charx',
     'module\🔦라이트보드 - 3.4.0-soya-0704.module.charx'
 )
@@ -71,6 +72,13 @@ foreach ($relativePath in $requiredBundleFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $relativePath))) {
         throw "필수 배포 파일이 없습니다: $relativePath"
     }
+}
+
+$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v43.module.charx'
+$expectedCurrentModuleSha256 = 'CFC97E841C74BA9E9C5727A414367B8A9D50888184D10554C67707A5F3887719'
+$actualCurrentModuleSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $currentModulePath).Hash
+if ($actualCurrentModuleSha256 -ne $expectedCurrentModuleSha256) {
+    throw "soya-v43 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
 }
 
 $backendPath = Join-Path $PSScriptRoot 'backend'
