@@ -55,7 +55,8 @@ foreach ($pattern in $forbiddenPatterns) {
 $requiredSignals = @(
     'lb-xnai-regenerate-all/',
     'lb-xnai-generate-all/',
-    'lb-xnai-gen/'
+    'lb-xnai-gen/',
+    'lb-xnai-edit/'
 )
 foreach ($signal in $requiredSignals) {
     if (-not $text.Contains($signal)) {
@@ -64,6 +65,7 @@ foreach ($signal in $requiredSignals) {
 }
 
 $requiredBundleFiles = @(
+    'module\라이트보드  삽화 3.4.1-soya-v44.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v43.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v42.module.charx',
     'module\🔦라이트보드 - 3.4.0-soya-0704.module.charx'
@@ -74,11 +76,11 @@ foreach ($relativePath in $requiredBundleFiles) {
     }
 }
 
-$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v43.module.charx'
-$expectedCurrentModuleSha256 = 'CFC97E841C74BA9E9C5727A414367B8A9D50888184D10554C67707A5F3887719'
+$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v44.module.charx'
+$expectedCurrentModuleSha256 = 'CB623FC3FD2D5CB50892B41F15F855ACB871B9F3DC6D94A7E352EF3D0C59FE53'
 $actualCurrentModuleSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $currentModulePath).Hash
 if ($actualCurrentModuleSha256 -ne $expectedCurrentModuleSha256) {
-    throw "soya-v43 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
+    throw "soya-v44 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
 }
 
 $backendPath = Join-Path $PSScriptRoot 'backend'

@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.6
+//@display-name soya comfy manager plugin v1.0.7
 //@api 3.0
-//@version 42.0.15
+//@version 42.0.16
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -10,11 +10,11 @@
 //@arg SIGNAL_WAIT_MS int Time to wait for an illustration session after generation output (default: 30000)
 //@arg DEBUG int Diagnostic logging (1: enabled, 0: state changes only)
 
-// Configuration/status-only companion for soya-v43.
+// Configuration/status-only companion for soya-v44.
 // - Importing the plugin never performs a health or status request.
 // - The plugin-owned HTTPS endpoint is mirrored to each current character on navigation.
 // - Unchanged Risu input/output channels sync configuration and arm session discovery.
-// - CALL1 full regeneration, RAW whole generation, and RAW per-slot regeneration
+// - CALL1 full regeneration, RAW whole/per-slot generation, and per-image easy edit
 //   buttons all arm discovery without reading their chat-index payloads.
 // - Active work switches to the faster POLL_MS interval and stops when it completes.
 // - It never reads messages, message indexes, or image data.
@@ -35,6 +35,7 @@
     'button[risu-btn^="lb-xnai-regenerate-all/"]',
     'button[risu-btn^="lb-xnai-generate-all/"]',
     'button[risu-btn^="lb-xnai-gen/"]',
+    'button[risu-btn^="lb-xnai-edit/"]',
   ].join(',');
   const ACTION_BOUND_ATTRIBUTE = 'x-lb-illust-v42-status-bound';
   const LOG = '[illust-status-v42]';
@@ -91,6 +92,14 @@
     checkedAt: 0,
     health: null,
     sessions: [],
+  };
+  let botState = {
+    loading: false,
+    saving: false,
+    bots: [],
+    selected: '',
+    draft: '',
+    error: '',
   };
 
   const errorText = (error) => String(error?.message || error || 'unknown error')
@@ -258,16 +267,95 @@
     }, delay);
   };
 
-  const fetchJson = async (pathname) => {
-    const response = await Risuai.nativeFetch(`${baseEndpoint}${pathname}`, {
-      method: 'GET',
+  const fetchJson = async (pathname, options = {}) => {
+    const method = String(options.method || 'GET').toUpperCase();
+    const requestOptions = {
+      method,
       networkRoute: 'local_network',
       requestTimeoutMs: 8000,
+    };
+    if (options.body !== undefined) {
+      requestOptions.headers = { 'Content-Type': 'application/json' };
+      requestOptions.body = JSON.stringify(options.body);
+    }
+    const response = await Risuai.nativeFetch(`${baseEndpoint}${pathname}`, {
+      ...requestOptions,
     });
-    if (!response?.ok) throw new Error(`${pathname} HTTP ${response?.status ?? 'unknown'}`);
+    if (!response?.ok) {
+      let detail = '';
+      try {
+        const payload = await response.json();
+        detail = String(payload?.error || '');
+      } catch (_) {}
+      throw new Error(detail || `${pathname} HTTP ${response?.status ?? 'unknown'}`);
+    }
     const value = await response.json();
     if (!value || typeof value !== 'object') throw new Error(`${pathname} returned invalid JSON`);
     return value;
+  };
+
+  const normalizeBotPayload = (payload) => {
+    const bots = [];
+    const seen = new Set();
+    for (const raw of Array.isArray(payload?.bots) ? payload.bots : []) {
+      const name = String(raw || '').trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      bots.push(name);
+    }
+    const selected = String(payload?.bot_selected || '').trim();
+    return { bots, selected };
+  };
+
+  const loadBotSelection = async () => {
+    if (!settings.configured || !baseEndpoint) return;
+    botState = { ...botState, loading: true, error: '' };
+    renderDashboard();
+    try {
+      const payload = await fetchJson('/api/illustration_context/bridge/bots');
+      const normalized = normalizeBotPayload(payload);
+      botState = {
+        loading: false,
+        saving: false,
+        bots: normalized.bots,
+        selected: normalized.selected,
+        draft: normalized.selected,
+        error: '',
+      };
+    } catch (error) {
+      botState = { ...botState, loading: false, saving: false, error: errorText(error) };
+    }
+    renderDashboard(true);
+  };
+
+  const saveBotSelection = async (selected) => {
+    const previous = botState.selected;
+    botState = { ...botState, saving: true, draft: selected, error: '' };
+    renderDashboard(true);
+    try {
+      const payload = await fetchJson('/api/illustration_context/bridge/bots', {
+        method: 'POST',
+        body: { bot_selected: selected },
+      });
+      const normalized = normalizeBotPayload(payload);
+      botState = {
+        loading: false,
+        saving: false,
+        bots: normalized.bots,
+        selected: normalized.selected,
+        draft: normalized.selected,
+        error: '',
+      };
+    } catch (error) {
+      botState = {
+        ...botState,
+        saving: false,
+        selected: previous,
+        draft: previous,
+        error: errorText(error),
+      };
+    }
+    renderDashboard(true);
   };
 
   const exactSlots = (detail) => {
@@ -597,6 +685,15 @@
     const connectionLabel = !configured ? '설정 전' : state.online ? '온라인' : state.checkedAt ? '연결 실패' : '확인 전';
     const dotColor = !configured ? '#7e8799' : state.online ? '#42d392' : '#ff647c';
     const armed = !watchSawActive && Date.now() < armedUntil;
+    const botValue = String(botState.draft || '');
+    const botNames = [...botState.bots];
+    if (botValue && !botNames.includes(botValue)) botNames.unshift(botValue);
+    const botOptions = [
+      `<option value="" ${botValue === '' ? 'selected' : ''}>선택 안 함</option>`,
+      ...botNames.map((name) => (
+        `<option value="${escapeHtml(name)}" ${name === botValue ? 'selected' : ''}>${escapeHtml(name)}</option>`
+      )),
+    ].join('');
     const rows = state.sessions.map((session) => {
       const progress = session?.progress || {};
       const percent = Math.max(0, Math.min(100, safeNumber(progress.value)));
@@ -623,10 +720,11 @@
         #${ROOT_ID} header,#${ROOT_ID} .session-head,#${ROOT_ID} .meta{display:flex;gap:12px;align-items:center;justify-content:space-between}
         #${ROOT_ID} h1{font-size:22px;margin:0} #${ROOT_ID} .sub,#${ROOT_ID} small{color:#aab3c8}
         #${ROOT_ID} button{border:1px solid #4d5870;background:#202838;color:#fff;border-radius:9px;padding:9px 14px;cursor:pointer}
-        #${ROOT_ID} input[type=text]{width:100%;border:1px solid #4d5870;background:#0f1420;color:#fff;border-radius:9px;padding:10px 12px}
+        #${ROOT_ID} input[type=text],#${ROOT_ID} select{width:100%;border:1px solid #4d5870;background:#0f1420;color:#fff;border-radius:9px;padding:10px 12px}
         #${ROOT_ID} .config,#${ROOT_ID} .option,#${ROOT_ID} .server{border:1px solid #30394d;border-radius:12px;background:#171c27;padding:14px;margin:14px 0}
         #${ROOT_ID} .config-row{display:flex;gap:9px;margin-top:9px} #${ROOT_ID} .config-row input{flex:1}
         #${ROOT_ID} .option{display:flex;align-items:center;justify-content:space-between;gap:16px} #${ROOT_ID} .option label{display:flex;gap:9px;align-items:center;font-weight:650}
+        #${ROOT_ID} .bot-select{align-items:flex-start} #${ROOT_ID} .bot-select label{min-width:120px;padding-top:10px} #${ROOT_ID} .bot-control{flex:1;display:flex;flex-direction:column;gap:7px}
         #${ROOT_ID} .floating-pos{flex-direction:column;align-items:stretch;gap:10px} #${ROOT_ID} .float-controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px} #${ROOT_ID} .float-controls label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#aab3c8} #${ROOT_ID} .float-controls input{width:92px;border:1px solid #4d5870;background:#0f1420;color:#fff;border-radius:9px;padding:8px 10px}
         #${ROOT_ID} .server{display:flex;gap:10px;align-items:center} #${ROOT_ID} .dot{width:10px;height:10px;border-radius:50%;background:${dotColor}}
         #${ROOT_ID} .error-text{color:#ff98a8;margin-left:auto;font-size:12px} #${ROOT_ID} .warning-text{display:block;color:#ffd479;margin-top:8px}
@@ -640,8 +738,9 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.6</h1><div class="sub">v42.0.15 · 종료된 오류 세션의 진행창 자동 닫기 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.7</h1><div class="sub">v42.0.16 · 백엔드 활성 봇 선택 · 이미지별 편하게 수정 신호 지원</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
+        <section class="option bot-select"><label for="lb-v42-bot-select">백엔드 활성 봇</label><div class="bot-control"><select id="lb-v42-bot-select" ${!configured || botState.loading || botState.saving ? 'disabled' : ''}>${botOptions}</select><small>${!configured ? '서버 주소를 먼저 저장하세요.' : botState.loading ? '백엔드 봇 목록을 불러오는 중입니다.' : botState.saving ? '활성 봇을 저장하는 중입니다.' : `${botState.bots.length}개 봇 · 선택 즉시 백엔드에 저장됩니다.`}</small>${botState.error ? `<small class="warning-text">${escapeHtml(botState.error)}</small>` : ''}</div></section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
         <section class="option floating-pos"><label>플로팅 창 위치 · z-index</label><div class="float-controls"><label>z-index<input id="lb-v42-float-z" type="number" min="0" max="99999" value="${settings.floatingZIndex}"></label><label>오른쪽 여백<input id="lb-v42-float-x" type="number" min="0" max="4000" value="${settings.floatingOffsetX}"></label><label>위쪽 여백<input id="lb-v42-float-y" type="number" min="0" max="4000" value="${settings.floatingOffsetY}"></label></div><small>다른 플러그인 DOM과 겹칠 때 z-index를 낮추면 상대방 닫기 버튼이 위로 올라옵니다. 대시보드를 닫아야 플로팅 창이 보입니다.</small></section>
         <section class="option"><label><input id="lb-v42-float-always" type="checkbox" ${settings.floatingAlwaysVisible ? 'checked' : ''}>항상 보이기 (위치 잡기용)</label><small>활성 작업이 없어도 플로팅 창을 띄워 둡니다. 위치를 잡은 뒤 끄면 됩니다.</small></section>
@@ -658,6 +757,10 @@
       dashboardOpen = false;
       await Risuai.hideContainer();
       schedulePoll();
+    });
+    document.getElementById('lb-v42-bot-select')?.addEventListener('change', (event) => {
+      const selected = String(event.currentTarget?.value || '');
+      void saveBotSelection(selected);
     });
     document.getElementById('lb-v42-floating-enabled')?.addEventListener('change', async (event) => {
       settings.floatingEnabled = Boolean(event.currentTarget?.checked);
@@ -702,6 +805,9 @@
         manifestCache.clear();
         manifestFailureCache.clear();
         state = { online: false, error: '', checkedAt: 0, health: null, sessions: [] };
+        botState = {
+          loading: false, saving: false, bots: [], selected: '', draft: '', error: '',
+        };
         await saveSettings();
         try {
           const result = await persistEndpointForCurrentCharacter(endpoint);
@@ -723,6 +829,7 @@
         renderDashboard();
         void initIllustrationActionSignalBridge();
         await poll();
+        await loadBotSelection();
       } catch (error) {
         state = { ...state, online: false, error: errorText(error), checkedAt: Date.now() };
         renderDashboard(true);
@@ -731,6 +838,7 @@
     document.getElementById('lb-v42-refresh')?.addEventListener('click', async () => {
       watchEnabled = true;
       await poll();
+      await loadBotSelection();
     });
     document.getElementById('lb-v42-arm')?.addEventListener('click', async () => {
       watchEnabled = true;
@@ -755,10 +863,11 @@
     const now = Date.now();
     if (state.health && now - healthCheckedAt < HEALTH_CACHE_MS) return state.health;
     const health = await fetchJson('/api/illustration_context/bridge/health');
-    if (health?.ok !== true || safeNumber(health?.version) < 6
+    if (health?.ok !== true || safeNumber(health?.version) < 7
         || health?.short_slot_manifest !== true || safeNumber(health?.lookup_key_length) !== 24
-        || safeNumber(health?.max_slot_manifest_count) !== MAX_EXACT_SLOT_COUNT) {
-      throw new Error('server does not advertise the v42 65-slot protocol');
+        || safeNumber(health?.max_slot_manifest_count) !== MAX_EXACT_SLOT_COUNT
+        || health?.bot_selection !== true || health?.easy_edit !== true) {
+      throw new Error('server does not advertise the v42 protocol 7 controls');
     }
     healthCheckedAt = now;
     return health;
@@ -821,7 +930,10 @@
       }
     }
     renderDashboard();
-    if (settings.configured && baseEndpoint) await poll();
+    if (settings.configured && baseEndpoint) {
+      await poll();
+      await loadBotSelection();
+    }
   };
 
   try {
@@ -846,7 +958,7 @@
       console.warn(LOG, 'generation.output_hook_unavailable; use manual watcher for every run');
     }
     console.log(LOG, 'plugin.boot', JSON.stringify({
-      module_expected: 'soya-v43',
+      module_expected: 'soya-v44',
       role: 'endpoint-config-and-status-observer',
       initial_health_request: false,
       polling: 'idle=off; generation-signal=discovery; active=fast',
@@ -854,7 +966,7 @@
       generation_output_hook: generationHookRegistered,
       character_endpoint_sync: 'event-driven; polling=off',
       endpoint_variable_priority: [ENDPOINT_VARIABLE_V2, ENDPOINT_VARIABLE_LEGACY],
-      illustration_action_button_signals: ['regenerate-all', 'generate-all', 'gen'],
+      illustration_action_button_signals: ['regenerate-all', 'generate-all', 'gen', 'edit'],
       raw_regeneration_floating: true,
       completion_confirm_polls: COMPLETION_CONFIRM_POLLS,
       discovery_poll_ms: discoveryPollMs,
