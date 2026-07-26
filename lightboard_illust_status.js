@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.5
+//@display-name soya comfy manager plugin v1.0.6
 //@api 3.0
-//@version 42.0.14
+//@version 42.0.15
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -73,6 +73,7 @@
   const HEALTH_CACHE_MS = 5 * 60 * 1000;
   const COMPLETION_CONFIRM_POLLS = 3;
   const CHARACTER_SYNC_DEBOUNCE_MS = 150;
+  const TERMINAL_SESSION_STATES = new Set(['ready', 'error', 'failed', 'cancelled', 'canceled', 'missing']);
   const manifestCache = new Map();
   const manifestFailureCache = new Map();
   let settings = {
@@ -320,9 +321,13 @@
   };
 
   const activeSessions = () => state.sessions.filter((session) => {
-    const status = String(session?.status || 'missing');
-    const phase = String(session?.progress?.phase || '');
-    return status !== 'ready' || phase === 'regenerating';
+    const status = String(session?.status || 'missing').toLowerCase();
+    const phase = String(session?.progress?.phase || '').toLowerCase();
+    // Regeneration keeps the underlying session ready while work is active.
+    if (phase === 'regenerating') return true;
+    // Failed/cancelled sessions are terminal just like successful ready sessions.
+    // Leaving them active keeps the floating progress window open forever.
+    return !TERMINAL_SESSION_STATES.has(status) && !TERMINAL_SESSION_STATES.has(phase);
   });
 
   const stopTimer = () => {
@@ -635,7 +640,7 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.5</h1><div class="sub">v42.0.14 · 캐릭터 전환 시 서버 주소 자동 동기화 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.6</h1><div class="sub">v42.0.15 · 종료된 오류 세션의 진행창 자동 닫기 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
         <section class="option floating-pos"><label>플로팅 창 위치 · z-index</label><div class="float-controls"><label>z-index<input id="lb-v42-float-z" type="number" min="0" max="99999" value="${settings.floatingZIndex}"></label><label>오른쪽 여백<input id="lb-v42-float-x" type="number" min="0" max="4000" value="${settings.floatingOffsetX}"></label><label>위쪽 여백<input id="lb-v42-float-y" type="number" min="0" max="4000" value="${settings.floatingOffsetY}"></label></div><small>다른 플러그인 DOM과 겹칠 때 z-index를 낮추면 상대방 닫기 버튼이 위로 올라옵니다. 대시보드를 닫아야 플로팅 창이 보입니다.</small></section>
