@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.3
+//@display-name soya comfy manager plugin v1.0.4
 //@api 3.0
-//@version 42.0.12
+//@version 42.0.13
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -30,6 +30,7 @@
   const ENDPOINT_VARIABLE_V2 = 'lb-xnai-server-endpoint-v2';
   const ENDPOINT_VARIABLE_LEGACY = 'lb-xnai-server-endpoint';
   const LOOKUP_KEY_LENGTH = 24;
+  const MAX_EXACT_SLOT_COUNT = 65;
   const ACTION_BUTTON_SELECTOR = [
     'button[risu-btn^="lb-xnai-regenerate-all/"]',
     'button[risu-btn^="lb-xnai-generate-all/"]',
@@ -73,6 +74,7 @@
   const COMPLETION_CONFIRM_POLLS = 3;
   const CHARACTER_SYNC_DEBOUNCE_MS = 150;
   const manifestCache = new Map();
+  const manifestFailureCache = new Map();
   let settings = {
     endpoint: '',
     configured: false,
@@ -293,11 +295,28 @@
       `/api/illustration_context/bridge/session/${encodeURIComponent(sessionId)}`,
     );
     const slots = exactSlots(detail);
-    if (slots.length < 1 || slots.length > 16) {
+    if (slots.length < 1 || slots.length > MAX_EXACT_SLOT_COUNT) {
       throw new Error(`invalid exact slot manifest: session=${sessionId} count=${slots.length}`);
     }
     manifestCache.set(sessionId, { updatedAt, slots });
     return { ...summary, status: detail.status || status, progress: detail.progress || summary.progress, slots };
+  };
+
+  const enrichSessionSafely = async (summary) => {
+    const sessionId = String(summary?.session_id || '');
+    try {
+      const enriched = await enrichSession(summary);
+      manifestFailureCache.delete(sessionId);
+      return { ...enriched, manifestError: '' };
+    } catch (error) {
+      const message = errorText(error);
+      const signature = `${safeNumber(summary?.updated_at)}:${message}`;
+      if (manifestFailureCache.get(sessionId) !== signature) {
+        manifestFailureCache.set(sessionId, signature);
+        console.warn(LOG, 'session.manifest_failed', JSON.stringify({ session: sessionId, error: message }));
+      }
+      return { ...summary, slots: [], manifestError: message };
+    }
   };
 
   const activeSessions = () => state.sessions.filter((session) => {
@@ -544,6 +563,7 @@
         done: session?.progress?.done,
         total: session?.progress?.total,
         slots: session?.slots,
+        manifestError: session?.manifestError,
       })),
     });
     if (signature !== lastSignature) {
@@ -585,6 +605,7 @@
         <div class="bar"><i style="width:${percent}%"></i></div>
         <div class="meta"><span>${percent.toFixed(1)}%</span><span>${total > 0 ? `${done} / ${total}` : ''}</span></div>
         ${Array.isArray(session?.slots) && session.slots.length ? `<div class="slots">slots: ${escapeHtml(session.slots.join(', '))}</div>` : ''}
+        ${session?.manifestError ? `<div class="manifest-error">슬롯 메타데이터 경고: ${escapeHtml(session.manifestError)}</div>` : ''}
       </article>`;
     }).join('');
 
@@ -609,11 +630,12 @@
         #${ROOT_ID} code{font-size:12px;color:#c8d3ef;overflow-wrap:anywhere} #${ROOT_ID} .badge{font-size:11px;padding:3px 7px;border-radius:999px;background:#273149}
         #${ROOT_ID} .label{margin:12px 0 8px} #${ROOT_ID} .bar{height:7px;border-radius:999px;overflow:hidden;background:#293043}
         #${ROOT_ID} .bar i{display:block;height:100%;background:linear-gradient(90deg,#5e8cff,#55d6be)} #${ROOT_ID} .meta,#${ROOT_ID} .slots{font-size:12px;color:#9fa9be;margin-top:7px}
+        #${ROOT_ID} .manifest-error{font-size:12px;color:#ffd479;margin-top:7px;overflow-wrap:anywhere}
         #${ROOT_ID} .empty{color:#9fa9be;padding:30px 0;text-align:center;border:1px dashed #3b455b;border-radius:12px}
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.3</h1><div class="sub">v42.0.12 · 캐릭터 전환 시 서버 주소 자동 동기화 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.4</h1><div class="sub">v42.0.13 · 캐릭터 전환 시 서버 주소 자동 동기화 · 이미지 및 메시지 인덱스 접근 없음</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
         <section class="option floating-pos"><label>플로팅 창 위치 · z-index</label><div class="float-controls"><label>z-index<input id="lb-v42-float-z" type="number" min="0" max="99999" value="${settings.floatingZIndex}"></label><label>오른쪽 여백<input id="lb-v42-float-x" type="number" min="0" max="4000" value="${settings.floatingOffsetX}"></label><label>위쪽 여백<input id="lb-v42-float-y" type="number" min="0" max="4000" value="${settings.floatingOffsetY}"></label></div><small>다른 플러그인 DOM과 겹칠 때 z-index를 낮추면 상대방 닫기 버튼이 위로 올라옵니다. 대시보드를 닫아야 플로팅 창이 보입니다.</small></section>
@@ -673,6 +695,7 @@
         watchEnabled = true;
         healthCheckedAt = 0;
         manifestCache.clear();
+        manifestFailureCache.clear();
         state = { online: false, error: '', checkedAt: 0, health: null, sessions: [] };
         await saveSettings();
         try {
@@ -727,9 +750,10 @@
     const now = Date.now();
     if (state.health && now - healthCheckedAt < HEALTH_CACHE_MS) return state.health;
     const health = await fetchJson('/api/illustration_context/bridge/health');
-    if (health?.ok !== true || safeNumber(health?.version) < 5
-        || health?.short_slot_manifest !== true || safeNumber(health?.lookup_key_length) !== 24) {
-      throw new Error('server does not advertise the v42 short-slot protocol');
+    if (health?.ok !== true || safeNumber(health?.version) < 6
+        || health?.short_slot_manifest !== true || safeNumber(health?.lookup_key_length) !== 24
+        || safeNumber(health?.max_slot_manifest_count) !== MAX_EXACT_SLOT_COUNT) {
+      throw new Error('server does not advertise the v42 65-slot protocol');
     }
     healthCheckedAt = now;
     return health;
@@ -743,7 +767,7 @@
       const health = await getCompatibleHealth();
       const sessionData = await fetchJson('/api/illustration_context/bridge/sessions?limit=20');
       if (!Array.isArray(sessionData?.sessions)) throw new Error('sessions response has no array');
-      const sessions = await Promise.all(sessionData.sessions.map(enrichSession));
+      const sessions = await Promise.all(sessionData.sessions.map(enrichSessionSafely));
       state = { online: true, error: '', checkedAt: Date.now(), health, sessions };
       if (activeSessions().length > 0) {
         watchSawActive = true;
@@ -833,6 +857,7 @@
       active_poll_ms: pollMs,
       health_cache_ms: HEALTH_CACHE_MS,
       lookup_key_length: LOOKUP_KEY_LENGTH,
+      max_exact_slot_count: MAX_EXACT_SLOT_COUNT,
       character_config_access: true,
       message_array_access: false,
       target_message_index_access: false,
