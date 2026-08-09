@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.9
+//@display-name soya comfy manager plugin v1.0.10
 //@api 3.0
-//@version 42.0.18
+//@version 42.0.19
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -37,7 +37,6 @@
     'button[risu-btn^="lb-xnai-gen/"]',
     'button[risu-btn^="lb-xnai-edit/"]',
   ].join(',');
-  const ACTION_BOUND_ATTRIBUTE = 'x-lb-illust-v42-status-bound';
   const LOG = '[illust-status-v42]';
   const SETTINGS_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v4H4z"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><path d="M9 19v2m6-2v2"/></svg>';
 
@@ -65,6 +64,8 @@
   let generationHookRegistered = false;
   let regenerationObserver = null;
   let regenerationBinding = false;
+  let illustrationSignalRoot = null;
+  let illustrationSignalListenerId = '';
   let regenerationBridgeUnavailableLogged = false;
   let endpointPersistWarning = '';
   let characterSyncTimer = null;
@@ -261,8 +262,14 @@
   const scheduleEndpointSyncForCurrentCharacter = (source, delay = CHARACTER_SYNC_DEBOUNCE_MS) => {
     if (!settings.configured || !baseEndpoint) return;
     if (characterSyncTimer !== null) clearTimeout(characterSyncTimer);
-    characterSyncTimer = setTimeout(() => {
+    characterSyncTimer = setTimeout(async () => {
       characterSyncTimer = null;
+      if (lastSynchronizedCharacterId && typeof Risuai.getCurrentCharacterIndex === 'function') {
+        try {
+          const selected = String(await Risuai.getCurrentCharacterIndex() ?? '');
+          if (selected === lastSynchronizedCharacterId) return;
+        } catch (_) {}
+      }
       void synchronizeEndpointForCurrentCharacter(source);
     }, delay);
   };
@@ -486,25 +493,39 @@
     return content;
   };
 
-  const illustrationActionClickHandler = () => {
-    armSessionDiscovery('illustration-action-button');
-  };
-
-  const bindIllustrationActionButtons = async () => {
-    if (regenerationBinding || !settings.configured || !baseEndpoint) return;
-    regenerationBinding = true;
+  const illustrationActionPointerHandler = async (event) => {
+    const clientX = Number(event?.clientX);
+    const clientY = Number(event?.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
     try {
       const root = await Risuai.getRootDocument?.();
-      if (!root) throw new Error('main DOM access denied');
+      if (!root) return;
       const buttons = await root.querySelectorAll(ACTION_BUTTON_SELECTOR);
       const length = await buttons.length();
       for (let index = 0; index < length; index += 1) {
         const button = await buttons.at(index);
         if (!button) continue;
-        if (await button.getAttribute(ACTION_BOUND_ATTRIBUTE) === '1') continue;
-        await button.setAttribute(ACTION_BOUND_ATTRIBUTE, '1');
-        await button.addEventListener('click', illustrationActionClickHandler);
+        const rect = await button.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+        if (clientX < rect.left || clientX > rect.right
+          || clientY < rect.top || clientY > rect.bottom) continue;
+        armSessionDiscovery('illustration-action-button');
+        return;
       }
+    } catch (error) {
+      if (debugEnabled) console.debug(LOG, 'illustration.pointer_signal_skipped', errorText(error));
+    }
+  };
+
+  const bindIllustrationActionSignal = async (body) => {
+    if (illustrationSignalListenerId || regenerationBinding || !settings.configured || !baseEndpoint) return;
+    regenerationBinding = true;
+    try {
+      if (!body) throw new Error('main DOM body unavailable');
+      illustrationSignalListenerId = await body.addEventListener(
+        'pointerdown', illustrationActionPointerHandler,
+      );
+      illustrationSignalRoot = body;
       regenerationBridgeUnavailableLogged = false;
     } catch (error) {
       if (!regenerationBridgeUnavailableLogged) {
@@ -524,13 +545,12 @@
       const body = await root.querySelector('body');
       if (!body) throw new Error('main DOM body unavailable');
       await synchronizeEndpointForCurrentCharacter('signal-bridge-init');
-      await bindIllustrationActionButtons();
+      await bindIllustrationActionSignal(body);
       if (typeof Risuai.createMutationObserver !== 'function') {
         throw new Error('Risuai.createMutationObserver is unavailable');
       }
       regenerationObserver = await Risuai.createMutationObserver(() => {
         scheduleEndpointSyncForCurrentCharacter('character-navigation');
-        void bindIllustrationActionButtons();
       });
       // Risu's SafeMutationObserver wraps mutation.target as SafeElement. A
       // characterData mutation targets a Text node and crashes that wrapper.
@@ -738,7 +758,7 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.9</h1><div class="sub">v42.0.18 · 생성 전 서버 연결 최대 5초 · 이미지별 편하게 수정 신호 지원</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.10</h1><div class="sub">v42.0.19 · 생성 전 서버 연결 최대 5초 · 이미지별 편하게 수정 신호 지원</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option bot-select"><label for="lb-v42-bot-select">백엔드 활성 봇</label><div class="bot-control"><select id="lb-v42-bot-select" ${!configured || botState.loading || botState.saving ? 'disabled' : ''}>${botOptions}</select><small>${!configured ? '서버 주소를 먼저 저장하세요.' : botState.loading ? '백엔드 봇 목록을 불러오는 중입니다.' : botState.saving ? '활성 봇을 저장하는 중입니다.' : `${botState.bots.length}개 봇 · 선택 즉시 백엔드에 저장됩니다.`}</small>${botState.error ? `<small class="warning-text">${escapeHtml(botState.error)}</small>` : ''}</div></section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
@@ -1012,6 +1032,15 @@
         try { await regenerationObserver.disconnect(); } catch (_) {}
         regenerationObserver = null;
       }
+      if (illustrationSignalRoot && illustrationSignalListenerId) {
+        try {
+          await illustrationSignalRoot.removeEventListener(
+            'pointerdown', illustrationSignalListenerId,
+          );
+        } catch (_) {}
+      }
+      illustrationSignalRoot = null;
+      illustrationSignalListenerId = '';
       if (generationHookRegistered && typeof Risuai.removeRisuScriptHandler === 'function') {
         try { await Risuai.removeRisuScriptHandler('output', generationOutputHandler); } catch (_) {}
       }
