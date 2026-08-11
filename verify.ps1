@@ -76,6 +76,7 @@ foreach ($signal in $requiredSignals) {
 }
 
 $requiredBundleFiles = @(
+    'module\라이트보드  삽화 3.4.1-soya-v46.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v45.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v44.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v43.module.charx',
@@ -88,11 +89,11 @@ foreach ($relativePath in $requiredBundleFiles) {
     }
 }
 
-$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v45.module.charx'
-$expectedCurrentModuleSha256 = '6987F89431D0D15B3119748902BC565C01AFC207465B0CB405E4EEA56FE581A2'
+$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v46.module.charx'
+$expectedCurrentModuleSha256 = 'EF8DD679CC899EE47C090AAB5D45380059252EFC92AFB6ABA594EFD12F7359A4'
 $actualCurrentModuleSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $currentModulePath).Hash
 if ($actualCurrentModuleSha256 -ne $expectedCurrentModuleSha256) {
-    throw "soya-v45 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
+    throw "soya-v46 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
 }
 
 $backendPath = Join-Path $PSScriptRoot 'backend'
