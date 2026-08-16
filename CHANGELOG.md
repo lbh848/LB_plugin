@@ -1,5 +1,14 @@
 # Changelog
 
+## 42.0.23 / module soya-v50
+
+- 버전 쿼리가 있는 정상 이미지 응답만 브라우저에 1시간 private 캐시하도록 백엔드 계약을 변경해 채팅 DOM 재렌더 때 animated AVIF/WebP/GIF를 다시 내려받는 문제 완화
+- 잘못된 버전 쿼리, 준비 전·누락·오류 응답은 계속 `no-store`로 유지해 실패 응답이나 변경 가능한 URL이 캐시되지 않도록 제한
+- 모듈은 애니메이션 슬롯에만 `loading="eager" decoding="sync"`를 사용하고, 정적 이미지는 기존 `lazy/async`를 유지
+- 서버 원본 이미지 아래의 Risu PNG fallback과 애니메이션 편집 차단은 그대로 보존
+- 변경된 모듈을 `module/라이트보드  삽화 3.4.1-soya-v50.module.charx` 새 파일로 추가하고 v49 배포본은 보존
+- 플러그인과 대시보드 표시 버전을 `v1.0.14`, 대시보드 배포 버전을 `v42.0.23`으로 동기화
+
 ## 42.0.22 / module soya-v49
 
 - 브리지 protocol 8의 `/s/{key}?m=1` opt-in 확장으로 기존 슬롯 배열과 함께 애니메이션 슬롯 번호를 한 번에 조회
