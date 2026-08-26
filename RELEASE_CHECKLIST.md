@@ -3,7 +3,7 @@
 1. `lightboard_illust_status.js`의 `//@version`을 이전 GitHub 공개 버전보다 높입니다.
 2. `//@update-url`이 `lbh848/LB_plugin/main/lightboard_illust_status.js`를 가리키는지 확인합니다.
 3. PowerShell에서 `./verify.ps1`을 실행합니다.
-4. RisuAI에서 개발 파일을 직접 import하여 자동 생성, 수동 답장 메뉴, 전체·개별 생성, 정적 이미지의 `편하게 수정` 노출과 애니메이션 이미지의 편집 차단, 모든 이미지의 서버 원본/PNG fallback, animated 전용 eager/sync와 버전 URL의 1시간 private 캐시, 대시보드 입력을 확인합니다.
+4. RisuAI에서 개발 파일을 직접 import하여 자동 생성, 수동 답장 메뉴, 전체·개별 생성, `에셋만 리롤`의 일반 삽화 보존·에셋 위치 재선택·Comfy 미진입, 정적 이미지의 `편하게 수정` 노출과 애니메이션 이미지의 편집 차단, 모든 이미지의 서버 원본/PNG fallback, animated 전용 eager/sync와 버전 URL의 1시간 private 캐시, 대시보드 입력을 확인합니다.
 5. 변경 내용을 commit하고 `main`에 push합니다.
 6. raw URL의 앞 512바이트에 새 버전이 반영됐는지 확인합니다.
 7. 기존 설치본에서 업데이트 확인 후 녹색 `+`가 나타나고 업데이트되는지 확인합니다.

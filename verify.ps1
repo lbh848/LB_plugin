@@ -66,6 +66,7 @@ foreach ($pattern in $forbiddenPatterns) {
 $requiredSignals = @(
     'lb-xnai-regenerate-all/',
     'lb-xnai-generate-all/',
+    'lb-xnai-reroll-assets/',
     'lb-xnai-gen/',
     'lb-xnai-edit/'
 )
@@ -79,15 +80,17 @@ $requiredCompatibilityTokens = @(
     "'?m=1'",
     'slot_animation_metadata',
     'asset_display_metadata',
-    "module_expected: 'soya-v51'"
+    'asset_reroll',
+    "module_expected: 'soya-v52'"
 )
 foreach ($token in $requiredCompatibilityTokens) {
     if (-not $text.Contains($token)) {
-        throw "soya-v51 미디어 표시 호환성 식별자가 없습니다: $token"
+        throw "soya-v52 에셋 리롤 호환성 식별자가 없습니다: $token"
     }
 }
 
 $requiredBundleFiles = @(
+    'module\라이트보드  삽화 3.4.1-soya-v52.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v51.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v50.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v49.module.charx',
@@ -106,11 +109,11 @@ foreach ($relativePath in $requiredBundleFiles) {
     }
 }
 
-$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v51.module.charx'
-$expectedCurrentModuleSha256 = 'F6D69A8F7FEB3BF1F6F3FBE26687391F628A9C2A4606C5DA99FBBCBECEB6756A'
+$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v52.module.charx'
+$expectedCurrentModuleSha256 = 'CA04CC7B0F6C8312037E94325E65653212E1262EA5D11304599E38FF386D8261'
 $actualCurrentModuleSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $currentModulePath).Hash
 if ($actualCurrentModuleSha256 -ne $expectedCurrentModuleSha256) {
-    throw "soya-v51 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
+    throw "soya-v52 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
 }
 
 $backendPath = Join-Path $PSScriptRoot 'backend'

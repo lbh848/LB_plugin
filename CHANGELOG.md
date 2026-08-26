@@ -1,5 +1,15 @@
 # Changelog
 
+## 42.0.25 / module soya-v52
+
+- 답장 삽화 메뉴에 `🎲 에셋만 리롤` 버튼을 추가하고, 기존 일반 삽화는 유지한 채 업로드 원본 에셋과 삽입 슬롯만 다시 선택
+- 에셋 리롤도 최초 생성과 동일한 서버 `_select_original_asset_outputs` 및 `illustration_original_asset` LLM 작업을 사용하며, 일반 RAW descriptor·Comfy/hybrid 이미지 큐로 폴백하지 않도록 전용 `asset_reroll` transport로 격리
+- 일반 삽화 슬롯을 예약한 뒤 현재 본문 후보 슬롯에서 에셋 위치를 다시 고르고, 선택·원본 파일 로드가 전부 성공한 경우에만 서버 세션과 Risu 메시지를 원자적으로 교체
+- 실패하거나 선택 중 대상 응답이 바뀌면 기존 에셋과 일반 삽화를 그대로 유지하고 원인을 서버 cmd·Risu 알림·통합 큐 이력에 기록
+- 브리지 protocol 10의 `asset_reroll` 기능 플래그를 추가하고 플러그인이 새 버튼 신호를 진행 상태 감시에 포함
+- 변경된 모듈을 `module/라이트보드  삽화 3.4.1-soya-v52.module.charx` 새 파일로 추가하고 v51 배포본은 보존
+- 플러그인과 대시보드 표시 버전을 `v1.0.16`, 대시보드 배포 버전을 `v42.0.25`로 동기화
+
 ## 42.0.24 / module soya-v51
 
 - 서버의 `/s/{key}?m=1` 응답에 `original_asset` 슬롯 번호를 담는 `assets` 배열을 추가하고 브리지 protocol 9의 `asset_display_metadata` 기능으로 명시
