@@ -1,5 +1,13 @@
 # Changelog
 
+## 42.0.26 / module soya-v53
+
+- 오래된 채팅의 서버 원본 URL이 만료·누락되었을 때 정상 로컬 PNG fallback 위에 WebView 엑박 아이콘이 겹치던 문제 수정
+- 실패한 `.lb-xnai-server-live`의 대체 UI만 큰 음수 들여쓰기로 레이어 밖에 두고 `overflow: hidden`으로 잘라, 저장된 채팅을 다시 쓰지 않아도 새 모듈 CSS가 즉시 적용되도록 구성
+- 정상 PNG/GIF/animated AVIF/WebP 표시, Risu 로컬 fallback, animated 전용 eager/sync와 정적 lazy/async, 버전 URL 캐시 계약은 그대로 보존
+- 변경된 모듈을 `module/라이트보드  삽화 3.4.1-soya-v53.module.charx` 새 파일로 추가하고 v52 배포본은 보존
+- 플러그인과 대시보드 표시 버전을 `v1.0.17`, 대시보드 배포 버전을 `v42.0.26`으로 동기화
+
 ## 42.0.25 / module soya-v52
 
 - 답장 삽화 메뉴에 `🎲 에셋만 리롤` 버튼을 추가하고, 기존 일반 삽화는 유지한 채 업로드 원본 에셋과 삽입 슬롯만 다시 선택
