@@ -1,5 +1,14 @@
 # Changelog
 
+## 42.0.27 / module soya-v54
+
+- KEYVISUAL만 별도의 버튼·컨테이너 경로로 렌더되어 v53의 CSS 잘라내기로는 WebView 엑박 대체 UI가 남던 차이를 반영
+- v48 이후 저장된 KEYVISUAL의 상단 서버 `<img>`를 표시 시점에만 SVG `<image>` 레이어로 변환해, URL 만료·누락 시 엑박 없이 아래 Risu PNG fallback만 표시
+- 저장된 채팅 마크업은 다시 쓰지 않고, 일반 장면·에셋·생성·재생성 경로와 서버·백엔드는 변경하지 않음
+- KEYVISUAL 인라인과 전체화면 다이얼로그가 같은 안전 레이어를 쓰도록 하고, 정상 PNG/GIF/animated AVIF/WebP와 영구 fallback을 보존
+- 변경된 모듈을 `module/라이트보드  삽화 3.4.1-soya-v54.module.charx` 새 파일로 추가하고 v53 배포본은 보존
+- 플러그인과 대시보드 표시 버전을 `v1.0.18`, 대시보드 배포 버전을 `v42.0.27`로 동기화
+
 ## 42.0.26 / module soya-v53
 
 - 오래된 채팅의 서버 원본 URL이 만료·누락되었을 때 정상 로컬 PNG fallback 위에 WebView 엑박 아이콘이 겹치던 문제 수정
