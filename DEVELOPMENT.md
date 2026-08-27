@@ -71,6 +71,8 @@ soya-v53은 오래된 채팅의 서버 URL이 실패했을 때 WebView가 그리
 
 soya-v54는 KEYVISUAL이 일반 장면과 다른 버튼·컨테이너 경로를 사용해 v53의 CSS 잘라내기가 WebView 대체 UI를 완전히 숨기지 못한 예외를 처리합니다. `editDisplay` 렌더 시점에 `slot == '-1'`인 KEYVISUAL의 `.lb-xnai-server-live` HTML `<img>`만 SVG `<image>` 레이어로 바꿉니다. 실패한 SVG 이미지는 엑박 대체 UI를 그리지 않고 투명하게 남아 아래 Risu fallback을 노출합니다. v48~v53이 저장한 기존 마크업의 속성 순서를 호환하며, 저장 채팅을 변경하지 않고 키비주얼 인라인과 전체화면에만 적용해야 합니다. 일반 장면·에셋의 HTML `<img>` 경로는 변경하지 않습니다.
 
+soya-v55는 v54의 SVG `<image>`가 일부 Risu WebView에서 래스터·애니메이션을 비정상적으로 확대·합성하는 회귀를 제거합니다. KEYVISUAL의 라이브 레이어만 `<span style="background-image:...">`으로 변환하고 `background-size: cover`로 기존 크롭을 유지합니다. CSS 배경 URL은 실패해도 대체 아이콘을 생성하지 않으며, 정상 애니메이션은 SVG가 아닌 브라우저의 일반 이미지 디코딩·합성 경로를 사용해야 합니다. Risu의 DOM 정화는 일반 상태에서 `style` 배경 URL을 보존하고 `hideAllImages`일 때는 제거하므로 기존 설정 의미도 유지됩니다.
+
 ### 대시보드 입력 중 화면 갱신
 
 서버 상태 렌더링이 입력칸을 다시 만들면 HTTPS 주소를 타이핑하는 동안 값이 초기화됩니다. 현재의 draft/focus 보호 로직을 제거하지 마십시오. 입력 포커스 중에는 상태 갱신이 폼 값을 덮지 않아야 합니다.
@@ -130,6 +132,7 @@ soya-v52의 `에셋만 리롤`은 현재 응답에서 일반 삽화 슬롯을 �
 - 애니메이션 이미지에는 `편하게 수정` 버튼이 없으며 모듈·백엔드가 직접 호출도 거절하는가
 - 키비주얼과 일반 장면 모두 서버 원본 URL과 Risu 로컬 PNG fallback이 함께 저장되는가
 - 만료·누락된 서버 URL에서 fallback은 보이되 키비주얼의 인라인·전체화면과 일반 장면에 브라우저 엑박 아이콘이 겹치지 않는가
+- 정상 KEYVISUAL의 PNG/GIF/animated AVIF/WebP가 흐림·확대·조각남 없이 표시되고 애니메이션이 실제로 진행하는가
 - 애니메이션 이미지는 eager/sync, 정적 이미지는 lazy/async 속성으로 저장되는가
 - 버전 쿼리가 있는 정상 이미지 응답만 1시간 private 캐시되고 오류 응답은 `no-store`인가
 - 진행창을 꺼도 모듈 동작이 유지되는가

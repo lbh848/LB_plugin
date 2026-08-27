@@ -1,5 +1,15 @@
 # Changelog
 
+## 42.0.28 / module soya-v55
+
+- v54의 KEYVISUAL SVG `<image>` 레이어가 Risu WebView에서 래스터·애니메이션을 흐리게 확대하거나 조각내던 회귀 수정
+- KEYVISUAL의 상단 서버 레이어를 SVG 대신 CSS `background-image` span으로 변환해 정상 PNG/GIF/animated AVIF/WebP는 일반 이미지 디코딩·합성 경로로 표시
+- 서버 URL이 만료·누락되면 배경이 아무것도 그리지 않아, 엑박과 SVG 왜곡 없이 아래 Risu PNG fallback만 노출
+- 149프레임 GIF의 시간별 페인트 변화, 실패 URL에서 라이브 `<img>`·SVG 부재, fallback과 레이어 크기 일치를 브라우저로 검증
+- 저장된 채팅과 일반 장면·에셋·생성·재생성 경로, 서버·백엔드는 변경하지 않음
+- 변경된 모듈을 `module/라이트보드  삽화 3.4.1-soya-v55.module.charx` 새 파일로 추가하고 v54 배포본은 보존
+- 플러그인과 대시보드 표시 버전을 `v1.0.19`, 대시보드 배포 버전을 `v42.0.28`로 동기화
+
 ## 42.0.27 / module soya-v54
 
 - KEYVISUAL만 별도의 버튼·컨테이너 경로로 렌더되어 v53의 CSS 잘라내기로는 WebView 엑박 대체 UI가 남던 차이를 반영
