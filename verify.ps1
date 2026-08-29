@@ -81,15 +81,19 @@ $requiredCompatibilityTokens = @(
     'slot_animation_metadata',
     'asset_display_metadata',
     'asset_reroll',
-    "module_expected: 'soya-v55'"
+    "module_expected: 'soya-v59'"
 )
 foreach ($token in $requiredCompatibilityTokens) {
     if (-not $text.Contains($token)) {
-        throw "soya-v55 호환성 식별자가 없습니다: $token"
+        throw "soya-v59 호환성 식별자가 없습니다: $token"
     }
 }
 
 $requiredBundleFiles = @(
+    'module\라이트보드  삽화 4.1.0-soya-v59.module.charx',
+    'module\라이트보드  삽화 4.1.0-soya-v58.module.charx',
+    'module\라이트보드  삽화 4.1.0-soya-v57.module.charx',
+    'module\라이트보드  삽화 4.1.0-soya-v56.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v55.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v54.module.charx',
     'module\라이트보드  삽화 3.4.1-soya-v53.module.charx',
@@ -112,11 +116,11 @@ foreach ($relativePath in $requiredBundleFiles) {
     }
 }
 
-$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 3.4.1-soya-v55.module.charx'
-$expectedCurrentModuleSha256 = 'C14EF4AA6AE9FDC5A997662BA73D563C99A5500E8A48F4341B76645186268CB9'
+$currentModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 4.1.0-soya-v59.module.charx'
+$expectedCurrentModuleSha256 = '0309D183135350E7C6C728188B09B8A85230EBFC8A3F0BED3DD95DB80BCDD772'
 $actualCurrentModuleSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $currentModulePath).Hash
 if ($actualCurrentModuleSha256 -ne $expectedCurrentModuleSha256) {
-    throw "soya-v55 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
+    throw "soya-v59 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
 }
 
 $backendPath = Join-Path $PSScriptRoot 'backend'
