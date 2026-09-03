@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.24
+//@display-name soya comfy manager plugin v1.0.25
 //@api 3.0
-//@version 42.0.33
+//@version 42.0.34
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -10,7 +10,7 @@
 //@arg SIGNAL_WAIT_MS int Time to wait for an illustration session after generation output (default: 30000)
 //@arg DEBUG int Diagnostic logging (1: enabled, 0: state changes only)
 
-// Configuration/status-only companion for soya-v60.
+// Configuration/status-only companion for soya-v61.
 // - Importing the plugin never performs a health or status request.
 // - The plugin-owned HTTPS endpoint is mirrored to each current character on navigation.
 // - Unchanged Risu input/output channels sync configuration and arm session discovery.
@@ -762,7 +762,7 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.24</h1><div class="sub">v42.0.33 · 자동/수동 삽화 버튼 감시 · 에셋 리롤 · KEYVISUAL 안정화</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.25</h1><div class="sub">v42.0.34 · 자동/수동 삽화 버튼 감시 · 에셋 리롤 · KEYVISUAL 안정화</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option bot-select"><label for="lb-v42-bot-select">백엔드 활성 봇</label><div class="bot-control"><select id="lb-v42-bot-select" ${!configured || botState.loading || botState.saving ? 'disabled' : ''}>${botOptions}</select><small>${!configured ? '서버 주소를 먼저 저장하세요.' : botState.loading ? '백엔드 봇 목록을 불러오는 중입니다.' : botState.saving ? '활성 봇을 저장하는 중입니다.' : `${botState.bots.length}개 봇 · 선택 즉시 백엔드에 저장됩니다.`}</small>${botState.error ? `<small class="warning-text">${escapeHtml(botState.error)}</small>` : ''}</div></section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
@@ -1000,7 +1000,7 @@
       console.warn(LOG, 'generation.output_hook_unavailable; use manual watcher for every run');
     }
     console.log(LOG, 'plugin.boot', JSON.stringify({
-      module_expected: 'soya-v60',
+      module_expected: 'soya-v61',
       expected_module_connection_gate_ms: 5000,
       role: 'endpoint-config-and-status-observer',
       initial_health_request: false,
