@@ -1,7 +1,7 @@
 //@name lightboard-illust-status-v42
-//@display-name soya comfy manager plugin v1.0.31
+//@display-name soya comfy manager plugin v1.0.36
 //@api 3.0
-//@version 42.0.40
+//@version 42.0.45
 //@author soya
 //@update-url https://raw.githubusercontent.com/lbh848/LB_plugin/main/lightboard_illust_status.js
 //@arg END_POINT string Dashboard endpoint prefill (default: empty)
@@ -10,11 +10,11 @@
 //@arg SIGNAL_WAIT_MS int Time to wait for an illustration session after generation output (default: 30000)
 //@arg DEBUG int Diagnostic logging (1: enabled, 0: state changes only)
 
-// Configuration/status-only companion for soya-v67.
+// Configuration/status-only companion for soya-v69.
 // - Importing the plugin never performs a health or status request.
 // - The plugin-owned HTTPS endpoint is mirrored to each current character on navigation.
 // - Unchanged Risu input/output channels sync configuration and arm session discovery.
-// - CALL1 full regeneration, RAW whole/per-slot generation, original-asset
+// - OUTFIT full regeneration, RAW whole/per-slot generation, original-asset
 //   reroll, and static-image easy-edit buttons arm discovery without reading
 //   their chat-index payloads.
 // - Active work switches to the faster POLL_MS interval and stops when it completes.
@@ -62,6 +62,7 @@
   let floatingWindow = null;
   let floatingUnavailableLogged = false;
   let floatingSignature = '';
+  let completionTimer = null;
   let healthCheckedAt = 0;
   let generationInputHookRegistered = false;
   let generationHookRegistered = false;
@@ -77,10 +78,12 @@
   let lastCharacterSyncError = '';
   const HEALTH_CACHE_MS = 5 * 60 * 1000;
   const COMPLETION_CONFIRM_POLLS = 3;
+  const COMPLETION_DISPLAY_MS = 8000;
   const CHARACTER_SYNC_DEBOUNCE_MS = 150;
   const TERMINAL_SESSION_STATES = new Set(['ready', 'error', 'failed', 'cancelled', 'canceled', 'missing']);
   const manifestCache = new Map();
   const manifestFailureCache = new Map();
+  const sessionTimings = new Map();
   let settings = {
     endpoint: '',
     configured: false,
@@ -569,6 +572,8 @@
   };
 
   const removeFloatingWindow = async () => {
+    if (completionTimer !== null) clearTimeout(completionTimer);
+    completionTimer = null;
     if (floatingWindow) {
       try { await floatingWindow.remove(); } catch (_) {}
     }
@@ -615,29 +620,45 @@
 
   const renderFloatingWindow = async () => {
     const active = activeSessions();
+    const activeIds = new Set(active.map((session) => session.session_id));
+    const now = Date.now();
+    const completed = state.sessions.filter((session) => !activeIds.has(session.session_id)
+      && (sessionTimings.get(session.session_id)?.showUntil || 0) > now);
+    const visible = [...active, ...completed];
     const showAlways = settings.floatingEnabled && settings.floatingAlwaysVisible;
-    if (!settings.floatingEnabled || (!showAlways && (!state.online || active.length === 0))) {
+    if (!settings.floatingEnabled || (!showAlways && (!state.online || visible.length === 0))) {
       await removeFloatingWindow();
       return;
     }
+    if (completionTimer !== null) clearTimeout(completionTimer);
+    completionTimer = null;
     try {
       const floating = await ensureFloatingWindow();
-      if (active.length > 0) {
-        const rows = active.slice(0, 4).map((session) => {
+      if (visible.length > 0) {
+        const rows = visible.slice(0, 4).map((session) => {
           const progress = session?.progress || {};
-          const phase = String(progress.phase || session?.status || 'processing');
+          const timing = sessionTimings.get(session.session_id);
+          const finished = !activeIds.has(session.session_id);
+          const failed = ['error', 'failed', 'cancelled', 'canceled'].includes(String(progress.phase || '').toLowerCase())
+            || ['error', 'failed', 'cancelled', 'canceled'].includes(String(session.status || '').toLowerCase());
+          const accent = finished ? (failed ? '#ff647c' : '#42d392') : '#68a7ff';
+          const phase = progress.phase === 'call1' ? 'OUTFIT'
+            : progress.phase === 'call1_backtranslate' ? 'OUTFIT-BACKTRANSLATE'
+            : String(progress.phase || session?.status || 'processing');
           const percent = Math.max(0, Math.min(100, safeNumber(progress.value)));
           const done = Math.max(0, Math.trunc(safeNumber(progress.done)));
           const total = Math.max(0, Math.trunc(safeNumber(progress.total)));
-          return `<div style="min-width:230px;max-width:310px;background:rgb(23 28 39 / 94%);color:#eaf0ff;border:1px solid #39445b;border-left:4px solid #68a7ff;border-radius:9px;padding:10px 12px;box-shadow:0 10px 28px rgb(0 0 0 / 35%);font:12px/1.45 Inter,system-ui,sans-serif">
+          return `<div style="min-width:230px;max-width:310px;background:rgb(23 28 39 / 94%);color:#eaf0ff;border:1px solid #39445b;border-left:4px solid ${accent};border-radius:9px;padding:10px 12px;box-shadow:0 10px 28px rgb(0 0 0 / 35%);font:12px/1.45 Inter,system-ui,sans-serif">
             <div style="display:flex;justify-content:space-between;gap:10px"><strong>LightBoard 삽화</strong><span style="color:#9eabc5">${escapeHtml(phase)}</span></div>
             <div style="margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(progress.label || '서버 처리 중')}</div>
+            ${!finished && Array.isArray(session.active_llm_nodes) ? session.active_llm_nodes.map((node) => `<div style="margin-top:4px;color:#c8d3ef;overflow-wrap:anywhere">${escapeHtml(node.label || 'LLM')} · ${Number.isFinite(node.tps) ? `${node.tps.toFixed(1)} t/s` : '속도 측정 대기'}</div>`).join('') : ''}
             <div style="height:5px;background:#293043;border-radius:99px;overflow:hidden;margin-top:8px"><i style="display:block;width:${percent}%;height:100%;background:linear-gradient(90deg,#5e8cff,#55d6be)"></i></div>
             <div style="display:flex;justify-content:space-between;color:#9eabc5;margin-top:5px"><span>${percent.toFixed(1)}%</span><span>${total > 0 ? `${done}/${total}` : ''}</span></div>
+            <div style="margin-top:6px;color:#c8d3ef">${finished ? '전체 소요' : '전체 경과'} ${escapeHtml(timing?.text || '확인 중')}${timing?.observed ? ' · 감지 기준' : ''}</div>
           </div>`;
         }).join('');
         await floating.setInnerHTML(rows);
-        const nextFloatingSignature = active.map((session) => `${session?.session_id}:${session?.progress?.phase}:${session?.progress?.value}`).join('|');
+        const nextFloatingSignature = visible.map((session) => `${session?.session_id}:${session?.progress?.phase}:${session?.progress?.value}`).join('|');
         if (nextFloatingSignature !== floatingSignature) {
           floatingSignature = nextFloatingSignature;
           console.log(LOG, 'floating.shown', JSON.stringify({ count: active.length, zIndex: settings.floatingZIndex }));
@@ -658,6 +679,14 @@
       await floating.setStyle('visibility', 'visible');
       await floating.setStyle('opacity', '1');
       await floating.setStyle('pointerEvents', 'auto');
+      if (completed.length > 0) {
+        const nextExpiry = Math.min(...completed.map((session) => sessionTimings.get(session.session_id).showUntil));
+        // This timer only updates the DOM; completion never adds a server poll.
+        completionTimer = setTimeout(() => {
+          completionTimer = null;
+          void renderFloatingWindow();
+        }, Math.max(0, nextExpiry - Date.now()));
+      }
       floatingUnavailableLogged = false;
     } catch (error) {
       floatingWindow = null;
@@ -723,13 +752,18 @@
       const percent = Math.max(0, Math.min(100, safeNumber(progress.value)));
       const done = Math.max(0, Math.trunc(safeNumber(progress.done)));
       const total = Math.max(0, Math.trunc(safeNumber(progress.total)));
-      const phase = String(progress.phase || session?.status || 'building');
+      const phase = progress.phase === 'call1' ? 'OUTFIT'
+        : progress.phase === 'call1_backtranslate' ? 'OUTFIT-BACKTRANSLATE'
+        : String(progress.phase || session?.status || 'building');
       const status = String(session?.status || 'missing');
+      const timing = sessionTimings.get(session.session_id);
       return `<article class="session ${status === 'ready' ? 'ready' : status === 'error' ? 'error' : 'working'}">
         <div class="session-head"><code>${escapeHtml(session?.session_id || '')}</code><span class="badge">${escapeHtml(phase)}</span></div>
         <div class="label">${escapeHtml(progress.label || '처리 중')}</div>
+        ${Array.isArray(session.active_llm_nodes) ? session.active_llm_nodes.map((node) => `<div class="meta" style="overflow-wrap:anywhere">${escapeHtml(node.label || 'LLM')} · ${Number.isFinite(node.tps) ? `${node.tps.toFixed(1)} t/s` : '속도 측정 대기'}</div>`).join('') : ''}
         <div class="bar"><i style="width:${percent}%"></i></div>
         <div class="meta"><span>${percent.toFixed(1)}%</span><span>${total > 0 ? `${done} / ${total}` : ''}</span></div>
+        <div class="meta">${timing?.finishedAt ? '전체 소요' : '전체 경과'} ${escapeHtml(timing?.text || '확인 중')}${timing?.observed ? ' · 감지 기준' : ''}</div>
         ${Array.isArray(session?.slots) && session.slots.length ? `<div class="slots">slots: ${escapeHtml(session.slots.join(', '))}</div>` : ''}
         ${session?.manifestError ? `<div class="manifest-error">슬롯 메타데이터 경고: ${escapeHtml(session.manifestError)}</div>` : ''}
       </article>`;
@@ -762,7 +796,7 @@
         @media(max-width:640px){#${ROOT_ID} .shell{padding:14px}#${ROOT_ID} .config-row{flex-direction:column}}
       </style>
       <main id="${ROOT_ID}"><div class="shell">
-        <header><div><h1>soya comfy manager v1.0.31</h1><div class="sub">v42.0.40 · 자동/수동 삽화 버튼 감시 · 에셋 리롤 · KEYVISUAL 안정화</div></div><button id="lb-v42-close">닫기</button></header>
+        <header><div><h1>soya comfy manager v1.0.36</h1><div class="sub">v42.0.45 · 진행 노드 t/s · 삽화 전체 소요 시간 · 자동/수동 삽화 버튼 감시 · 에셋 리롤</div></div><button id="lb-v42-close">닫기</button></header>
         <section class="config"><strong>서버 HTTPS 주소</strong><div class="config-row"><input id="lb-v42-endpoint" type="text" value="${escapeHtml(endpointValue)}" placeholder="https://example.trycloudflare.com"><button id="lb-v42-save-check">저장 및 연결 확인</button><button id="lb-v42-refresh" ${configured ? '' : 'disabled'}>새로고침</button></div><div class="config-row"><button id="lb-v42-arm" ${configured ? '' : 'disabled'}>수동 감시 (10분)</button><button id="lb-v42-disarm" ${armed || watchSawActive ? '' : 'disabled'}>감시 중지</button><small>${armed ? '삽화 세션을 기다리는 중입니다.' : watchSawActive ? '활성 삽화 세션을 추적 중입니다.' : '일반 생성과 모듈의 전체/개별 생성 버튼을 자동 감지합니다.'}</small></div><small>한 번 저장하면 같은 서버 주소를 캐릭터 전환 시 자동 반영합니다. 짧은 슬롯 URL은 120자 이하여야 합니다.</small>${endpointPersistWarning ? `<small class="warning-text">${escapeHtml(endpointPersistWarning)}</small>` : ''}</section>
         <section class="option bot-select"><label for="lb-v42-bot-select">백엔드 활성 봇</label><div class="bot-control"><select id="lb-v42-bot-select" ${!configured || botState.loading || botState.saving ? 'disabled' : ''}>${botOptions}</select><small>${!configured ? '서버 주소를 먼저 저장하세요.' : botState.loading ? '백엔드 봇 목록을 불러오는 중입니다.' : botState.saving ? '활성 봇을 저장하는 중입니다.' : `${botState.bots.length}개 봇 · 선택 즉시 백엔드에 저장됩니다.`}</small>${botState.error ? `<small class="warning-text">${escapeHtml(botState.error)}</small>` : ''}</div></section>
         <section class="option"><label><input id="lb-v42-floating-enabled" type="checkbox" ${settings.floatingEnabled ? 'checked' : ''}>플로팅 진행창 활성화</label><small>활성 작업을 발견하면 provider-manager 방식의 창을 표시합니다.</small></section>
@@ -828,6 +862,7 @@
         healthCheckedAt = 0;
         manifestCache.clear();
         manifestFailureCache.clear();
+        sessionTimings.clear();
         state = { online: false, error: '', checkedAt: 0, health: null, sessions: [] };
         botState = {
           loading: false, saving: false, bots: [], selected: '', draft: '', error: '',
@@ -925,6 +960,45 @@
       if (!Array.isArray(sessionData?.sessions)) throw new Error('sessions response has no array');
       const sessions = await Promise.all(sessionData.sessions.map(enrichSessionSafely));
       state = { online: true, error: '', checkedAt: Date.now(), health, sessions };
+      const now = state.checkedAt;
+      const activeIds = new Set(activeSessions().map((session) => session.session_id));
+      for (const session of sessions) {
+        const sessionId = session.session_id;
+        const createdAt = safeNumber(session.created_at) * 1000;
+        const updatedAt = safeNumber(session.updated_at) * 1000;
+        const active = activeIds.has(sessionId);
+        const regenerating = String(session.progress?.phase || '').toLowerCase() === 'regenerating';
+        let timing = sessionTimings.get(sessionId);
+        if (!timing || timing.createdAt !== createdAt
+            || (active && timing.finishedAt && !(watchSawActive && inactiveConfirmationPolls > 0))) {
+          // Existing ready sessions retain their original created_at during RAW
+          // regeneration. Measure a newly observed run separately from that age.
+          timing = {
+            createdAt,
+            startedAt: regenerating || createdAt <= 0 ? now : createdAt,
+            finishedAt: 0,
+            observed: regenerating || createdAt <= 0,
+            showUntil: 0,
+            text: '',
+          };
+          if (!active) timing.finishedAt = updatedAt > 0 ? updatedAt : now;
+        } else if (active) {
+          // Sequential RAW slots can briefly report ready between requests.
+          timing.finishedAt = 0;
+          timing.showUntil = 0;
+        } else if (!timing.finishedAt) {
+          timing.finishedAt = timing.observed ? now : (updatedAt > 0 ? updatedAt : now);
+          timing.showUntil = now + COMPLETION_DISPLAY_MS;
+        }
+        const seconds = Math.floor(Math.max(0, (timing.finishedAt || now) - timing.startedAt) / 1000);
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        timing.text = `${hours > 0 ? `${hours}시간 ` : ''}${hours > 0 || minutes > 0 ? `${minutes}분 ` : ''}${seconds % 60}초`;
+        sessionTimings.set(sessionId, timing);
+      }
+      for (const sessionId of sessionTimings.keys()) {
+        if (!sessions.some((session) => session.session_id === sessionId)) sessionTimings.delete(sessionId);
+      }
       if (activeSessions().length > 0) {
         watchSawActive = true;
         inactiveConfirmationPolls = 0;
@@ -1000,7 +1074,7 @@
       console.warn(LOG, 'generation.output_hook_unavailable; use manual watcher for every run');
     }
     console.log(LOG, 'plugin.boot', JSON.stringify({
-      module_expected: 'soya-v67',
+      module_expected: 'soya-v69',
       expected_module_connection_gate_ms: 5000,
       role: 'endpoint-config-and-status-observer',
       initial_health_request: false,
@@ -1014,6 +1088,8 @@
       manual_after_reply_mode: true,
       module_image_transport: 'all-slots-media-metadata+asset-display-controls+server-url+persistent-risu-png-fallback',
       completion_confirm_polls: COMPLETION_CONFIRM_POLLS,
+      completion_display_ms: COMPLETION_DISPLAY_MS,
+      elapsed_time_scope: 'server-session; regeneration=first-observation; excludes-risu-save',
       discovery_poll_ms: discoveryPollMs,
       signal_wait_ms: signalWaitMs,
       active_poll_ms: pollMs,

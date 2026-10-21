@@ -81,15 +81,17 @@ $requiredCompatibilityTokens = @(
     'slot_animation_metadata',
     'asset_display_metadata',
     'asset_reroll',
-    "module_expected: 'soya-v67'"
+    "module_expected: 'soya-v69'"
 )
 foreach ($token in $requiredCompatibilityTokens) {
     if (-not $text.Contains($token)) {
-        throw "soya-v67 호환성 식별자가 없습니다: $token"
+        throw "soya-v69 호환성 식별자가 없습니다: $token"
     }
 }
 
 $requiredBundleFiles = @(
+    'module\라이트보드  삽화 4.1.0-soya-v69.module.charx',
+    'module\라이트보드  삽화 4.1.0-soya-v68.module.charx',
     'module\라이트보드  삽화 4.1.0-soya-v67.module.charx',
     'module\라이트보드  삽화 4.1.0-soya-v66.module.charx',
     'module\라이트보드  삽화 4.1.0-soya-v65.module.charx',
@@ -129,6 +131,38 @@ $expectedCurrentModuleSha256 = 'F8F37D7ACC14AAC3BE4EAC1916ED242CB7623E29AB289B7C
 $actualCurrentModuleSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $currentModulePath).Hash
 if ($actualCurrentModuleSha256 -ne $expectedCurrentModuleSha256) {
     throw "soya-v67 배포 모듈 해시가 검증된 완성본과 다릅니다: $actualCurrentModuleSha256"
+}
+
+$v69ModulePath = Join-Path $PSScriptRoot 'module\라이트보드  삽화 4.1.0-soya-v69.module.charx'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [IO.Compression.ZipFile]::OpenRead($v69ModulePath)
+try {
+    $cardEntry = $archive.GetEntry('card.json')
+    $moduleEntry = $archive.GetEntry('module.risum')
+    if ($null -eq $cardEntry -or $null -eq $moduleEntry -or $moduleEntry.Length -lt 7) {
+        throw 'soya-v69 배포 모듈에 카드 메타데이터 또는 실행 가능한 risum이 없습니다.'
+    }
+    $reader = [IO.StreamReader]::new($cardEntry.Open(), [Text.Encoding]::UTF8)
+    try {
+        $card = $reader.ReadToEnd() | ConvertFrom-Json
+    } finally {
+        $reader.Dispose()
+    }
+    if (-not $card.data.name.Contains('4.1.0-soya-v69')) {
+        throw 'soya-v69 배포 모듈의 카드 버전이 파일명과 다릅니다.'
+    }
+    $moduleStream = $moduleEntry.Open()
+    try {
+        $magic = $moduleStream.ReadByte()
+        $formatVersion = $moduleStream.ReadByte()
+    } finally {
+        $moduleStream.Dispose()
+    }
+    if ($magic -ne 0x6F -or $formatVersion -ne 0) {
+        throw 'soya-v69 배포 모듈의 risum 형식이 올바르지 않습니다.'
+    }
+} finally {
+    $archive.Dispose()
 }
 
 $backendPath = Join-Path $PSScriptRoot 'backend'

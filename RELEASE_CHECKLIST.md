@@ -1,5 +1,7 @@
 # 릴리스 체크리스트
 
+v69 배포 전에는 `node module/test_v69_image_recovery.cjs --pocketrisu`도 실행합니다. 서버 원본 실패 시 저장본을 클릭해 확대·닫기, KEYVISUAL·일반 삽화·애니메이션 에셋, 같은 media와 fallback 토큰 한 개 유지, 빈 후보·드롭·제거된 슬롯 제외, 원본 에셋 보존, 정상 RAW 생성과 실패 후 기존 채팅 보존을 확인합니다. v69 모듈은 별도로 import해야 하며 플러그인 온라인 업데이트만으로 교체되지 않습니다.
+
 1. `lightboard_illust_status.js`의 `//@version`을 이전 GitHub 공개 버전보다 높입니다.
 2. `//@update-url`이 `lbh848/LB_plugin/main/lightboard_illust_status.js`를 가리키는지 확인합니다.
 3. PowerShell에서 `./verify.ps1`을 실행합니다.
